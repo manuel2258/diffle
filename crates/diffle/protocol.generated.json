@@ -471,6 +471,10 @@
           "minimum": -9007199254740991,
           "maximum": 9007199254740991
         },
+        "hidden": {
+          "type": "boolean",
+          "description": "Drawn as a marker on its line instead of a card. Independent of `resolved`, though resolving a\nthread hides it and reopening shows it. Absent: shown."
+        },
         "stale": {
           "type": "boolean",
           "description": "Relocation failed: the lines left the diff, the file left the review, or the tour lost the passage."
@@ -982,6 +986,21 @@
         "cut"
       ],
       "description": "`GET /api/lsp/graph`: the snapshot's changed symbols and the code using them, from the language servers."
+    },
+    "HiddenRequest": {
+      "type": "object",
+      "properties": {
+        "hidden": {
+          "type": "boolean"
+        },
+        "author": {
+          "$ref": "#/$defs/CommentAuthor",
+          "description": "Absent: the reviewer hides or shows."
+        }
+      },
+      "required": [
+        "hidden"
+      ]
     },
     "HighlightResponse": {
       "type": "object",

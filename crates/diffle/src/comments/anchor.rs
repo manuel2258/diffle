@@ -114,6 +114,7 @@ mod tests {
             messages: vec![message],
             resolved: false,
             resolved_at: None,
+            hidden: None,
             stale: false,
             stale_from_line: None,
         }

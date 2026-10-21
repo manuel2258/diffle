@@ -42,6 +42,7 @@ expression: masked(all)
         "side": "new",
         "startLine": 1
       },
+      "hidden": true,
       "id": "[id]",
       "messages": [
         {

@@ -95,6 +95,7 @@ the running one's URL.
 - `C`: comment on the whole file
 - `V`: select a block
 - `R`: resolve
+- `H`: hide the threads on a line to a marker, or show them again (resolving hides a thread too)
 - `v`: mark viewed
 - `/`: search the current file
 - `g/`: search all changed files

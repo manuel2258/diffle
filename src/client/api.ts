@@ -12,6 +12,7 @@ import {
   RangeViewSchema,
   PatchRequestSchema,
   ReplyCreateSchema,
+  HiddenRequestSchema,
   ResolvedRequestSchema,
   ThreadCreateSchema,
   ViewedBulkRequestSchema,
@@ -161,6 +162,11 @@ export const api = {
         method: 'DELETE',
       },
     ),
+  setHidden: (id: string, hidden: boolean) =>
+    json(CommentThreadSchema, `api/threads/${encodeURIComponent(id)}/hidden`, {
+      method: 'PUT',
+      body: encode(HiddenRequestSchema, { hidden }),
+    }),
   setResolved: (id: string, resolved: boolean) =>
     json(CommentThreadSchema, `api/threads/${encodeURIComponent(id)}/resolved`, {
       method: 'PUT',

@@ -21,7 +21,8 @@ use crate::comments::format::format_prompt;
 use crate::comments::import::parse_imports;
 use crate::error::Error;
 use crate::protocol::{
-    Activity, ActivityQuery, AuthorQuery, ClearThreadsQuery, CommentAuthor, MessagePatch, ReplyCreate, ResolvedRequest,
+    Activity, ActivityQuery, AuthorQuery, ClearThreadsQuery, CommentAuthor, HiddenRequest, MessagePatch, ReplyCreate,
+    ResolvedRequest,
     ServerMessage, ThreadList, ThreadQuery, ThreadState, ViewedEntry,
 };
 use crate::session::Broadcaster;
@@ -34,6 +35,7 @@ pub fn routes() -> Router<Arc<ApiDeps>> {
         .route("/api/threads/{id}", delete(remove_thread))
         .route("/api/threads/{id}/replies", post(reply))
         .route("/api/threads/{id}/resolved", put(resolve))
+        .route("/api/threads/{id}/hidden", put(hide))
         .route("/api/threads/{id}/messages/{mid}", patch(edit_message).delete(remove_message))
         .route("/api/threads/{id}/messages/{mid}/export", get(export_message))
         .route("/api/github/export", post(github_export))
@@ -125,6 +127,13 @@ async fn remove_message(
 async fn resolve(State(d): State<Arc<ApiDeps>>, Path(id): Path<String>, raw: Bytes) -> ApiResult {
     let req: ResolvedRequest = body(&raw)?;
     let thread = d.session.comments()?.set_resolved(&id, req.resolved).await?;
+    changed(&d, [(req.author, id)]);
+    Ok(Json(thread).into_response())
+}
+
+async fn hide(State(d): State<Arc<ApiDeps>>, Path(id): Path<String>, raw: Bytes) -> ApiResult {
+    let req: HiddenRequest = body(&raw)?;
+    let thread = d.session.comments()?.set_hidden(&id, req.hidden).await?;
     changed(&d, [(req.author, id)]);
     Ok(Json(thread).into_response())
 }

@@ -57,6 +57,7 @@ import {
   currentPath,
   filterSymbols,
   isCollapsed,
+  isThreadHidden,
   isViewed,
   nextFileAfter,
   itemIdOf,
@@ -68,7 +69,6 @@ import {
   rangeStep,
   reuseThreads,
   selectionRange,
-  visibleThreads,
   codeDraft,
   commentsOff,
   iterationPick,
@@ -455,6 +455,8 @@ export interface ReviewState {
   deleteCommentAtCursor(): Promise<void>;
   /** Flip resolved on the thread under the cursor. */
   toggleResolvedAtCursor(): Promise<void>;
+  /** `H`: turn the line threads under the cursor into a marker on their line, or back into cards. */
+  toggleHiddenAtCursor(): Promise<void>;
   /** `v`: flip viewed on the file under the cursor; marking it viewed advances to the next unviewed file. */
   toggleViewedAtCursor(): Promise<void>;
   /** `gv`: flip viewed on the file above the cursor's, leaving the cursor where it is. */
@@ -480,6 +482,8 @@ export interface ReviewState {
   /** Resolved threads stay hidden unless the user turns them on. */
   showResolved: boolean;
   setShowResolved(on: boolean): void;
+  /** Draw a line thread as a marker on its line, or as a card again; kept with the thread. */
+  setThreadHidden(thread: CommentThread, hidden: boolean): Promise<void>;
   viewed: ViewedEntry[];
   config: UserConfig;
   /** Open while the main pane shows one whole file instead of the diff list. */
@@ -1492,14 +1496,15 @@ export const useStore = create<ReviewState>((set, get) => {
     }));
   };
 
-  const threadAtCursor = (): CommentThread | undefined => {
+  const threadsAtCursor = (): CommentThread[] => {
     const s = get();
     const sel = s.selection;
-    if (!sel) return undefined;
+    if (!sel) return [];
     const path = pathFromItemId(sel.id);
     const side = sideOf(sel);
     const line = sel.range.end;
-    return visibleThreads(s).find(
+    // The diff draws every thread, resolved ones as markers, so the cursor reaches them all.
+    return s.threads.filter(
       (t) =>
         t.anchor.kind === 'line' &&
         t.anchor.path === path &&
@@ -1508,6 +1513,7 @@ export const useStore = create<ReviewState>((set, get) => {
         line <= t.anchor.endLine,
     );
   };
+  const threadAtCursor = (): CommentThread | undefined => threadsAtCursor()[0];
 
   /** The authoritative list replaces the store's; threads that did not change keep their objects. */
   const acceptThreads = (next: ThreadList) =>
@@ -2272,6 +2278,18 @@ export const useStore = create<ReviewState>((set, get) => {
       await get().setResolved(t.id, !t.resolved);
       get().flash(t.resolved ? 'Thread reopened' : 'Thread resolved');
     },
+    async toggleHiddenAtCursor() {
+      const threads = threadsAtCursor();
+      if (threads.length === 0) return get().flash('No thread under the cursor');
+      const s = get();
+      // As drawn: the focused thread is a card even when hidden. Any card on the line hides, like the
+      // marker they then share; once all are markers, H shows them all again.
+      const cards = threads.filter((t) => t.id === s.focusedThread || !isThreadHidden(t));
+      const hide = cards.length > 0;
+      await Promise.all((hide ? cards : threads).map((t) => s.setThreadHidden(t, hide)));
+      const n = hide ? cards.length : threads.length;
+      get().flash(`${n === 1 ? 'Thread' : `${n} threads`} ${hide ? 'hidden' : 'shown'}`);
+    },
     async toggleViewedAtCursor() {
       const path = get().activePath;
       const f = path ? get().snapshot?.changed.find((x) => x.path === path) : undefined;
@@ -2353,6 +2371,11 @@ export const useStore = create<ReviewState>((set, get) => {
     error: null,
     threads: [],
     checks: [],
+    setThreadHidden(thread, hidden) {
+      // The focused thread always shows as a card (a jump lands on it), so hiding it drops the focus.
+      if (hidden && get().focusedThread === thread.id) set({ focusedThread: null });
+      return mutateThreads(hidden ? 'Hiding the thread' : 'Showing the thread', () => api.setHidden(thread.id, hidden));
+    },
     showResolved: false,
     setShowResolved(on) {
       set({ showResolved: on });
@@ -2754,6 +2777,7 @@ export const useStore = create<ReviewState>((set, get) => {
     },
     deleteMessage: (threadId, messageId) =>
       mutateThreads('Deleting the message', () => api.deleteMessage(threadId, messageId)),
+    // The server hides a thread it resolves and shows one it reopens.
     setResolved: (threadId, resolved) =>
       mutateThreads(resolved ? 'Resolving' : 'Reopening', () => api.setResolved(threadId, resolved)),
     deleteThread: (id) => mutateThreads('Deleting the thread', () => api.deleteThread(id)),

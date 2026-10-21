@@ -44,6 +44,7 @@ export const DIFF_HELP: HelpSection[][] = [
         ['e', 'edit the newest message of the thread under the cursor'],
         ['dd', 'delete the thread under the cursor'],
         ['R', 'resolve / reopen the thread under the cursor'],
+        ['H', 'hide / show the threads under the cursor'],
         ['yy or Y', 'copy all comments'],
         ['yp', 'copy the current file’s path'],
         ['yl', 'copy a GitHub link to the line or selection'],

@@ -464,6 +464,11 @@ export const CommentThreadSchema = z.object({
   messages: CommentMessageSchema.array().min(1),
   resolved: z.boolean(),
   resolvedAt: z.number().int().optional(),
+  /**
+   * Drawn as a marker on its line instead of a card. Independent of `resolved`, though resolving a
+   * thread hides it and reopening shows it. Absent: shown.
+   */
+  hidden: z.boolean().optional(),
   /** Relocation failed: the lines left the diff, the file left the review, or the tour lost the passage. */
   stale: z.boolean(),
   /** Original startLine of a line thread, shown in export when stale. */
@@ -1058,6 +1063,11 @@ export type ConfigUpdate = z.infer<typeof ConfigUpdateSchema>;
 export const ResolvedRequestSchema = z.object({
   resolved: z.boolean(),
   /** Absent: the reviewer resolves or reopens. */
+  author: CommentAuthorSchema.optional(),
+});
+export const HiddenRequestSchema = z.object({
+  hidden: z.boolean(),
+  /** Absent: the reviewer hides or shows. */
   author: CommentAuthorSchema.optional(),
 });
 export const ViewedBulkRequestSchema = z.object({ entries: ViewedEntrySchema.array() });

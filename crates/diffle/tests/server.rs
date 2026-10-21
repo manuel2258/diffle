@@ -15,6 +15,7 @@ const BODY_ROUTES: &[(&str, &str)] = &[
     ("POST", "/api/threads/missing/replies"),
     ("PATCH", "/api/threads/missing/messages/missing"),
     ("PUT", "/api/threads/missing/resolved"),
+    ("PUT", "/api/threads/missing/hidden"),
     ("PUT", "/api/viewed"),
     ("PUT", "/api/viewed/bulk"),
     ("PUT", "/api/config"),

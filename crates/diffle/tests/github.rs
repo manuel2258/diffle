@@ -91,6 +91,7 @@ fn thread_with(id: &str, anchor: CommentAnchor, body: &str, resolved: bool, stal
         }],
         resolved,
         resolved_at: None,
+        hidden: None,
         stale,
         stale_from_line: None,
     }

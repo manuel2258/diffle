@@ -220,6 +220,11 @@ export function isCollapsed(
   return f ? isViewed(state, f) || f.generated : false;
 }
 
+/** Whether a line thread shows as a marker on its line instead of a card: the reader's choice, else when resolved. */
+export function isThreadHidden(t: CommentThread): boolean {
+  return t.anchor.kind === 'line' && t.hidden === true;
+}
+
 /** Threads the UI shows: open ones, plus resolved when the user asked for them. */
 export function visibleThreads(state: Pick<ReviewState, 'threads' | 'showResolved'>): CommentThread[] {
   return state.showResolved ? state.threads : state.threads.filter((t) => !t.resolved);
@@ -307,10 +312,12 @@ export function itemDeps(
   path: string,
   mine: CommentThread[],
   collapsed: boolean,
+  /** The ids of the item's threads drawn as markers, joined. */
+  hidden: string,
 ): unknown[] {
   const reply = state.replyTo != null && mine.some((t) => t.id === state.replyTo) ? state.replyTo : null;
   const editing = state.editingId != null && threadOfMessage(mine, state.editingId) ? state.editingId : null;
-  return [...mine, state.draft?.path === path ? state.draft : null, collapsed, reply, editing];
+  return [...mine, state.draft?.path === path ? state.draft : null, collapsed, reply, editing, hidden];
 }
 
 export interface ItemVersion {

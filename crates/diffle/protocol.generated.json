@@ -205,6 +205,10 @@
           "minimum": -9007199254740991,
           "maximum": 9007199254740991
         },
+        "hidden": {
+          "type": "boolean",
+          "description": "Drawn as a marker on its line instead of a card. Independent of `resolved`, though resolving a\nthread hides it and reopening shows it. Absent: shown."
+        },
         "stale": {
           "type": "boolean",
           "description": "Relocation failed after a snapshot refresh: the lines left the diff, or the file left the review."
@@ -560,6 +564,17 @@
         "title",
         "state",
         "isDraft"
+      ]
+    },
+    "HiddenRequest": {
+      "type": "object",
+      "properties": {
+        "hidden": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "hidden"
       ]
     },
     "ImageQuery": {

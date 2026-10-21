@@ -77,6 +77,7 @@ const api = {
   patch: vi.fn(),
   patches: vi.fn(),
   setResolved: vi.fn(),
+  setHidden: vi.fn(),
   reply: vi.fn(),
   addThread: vi.fn(),
   search: vi.fn(),
@@ -962,6 +963,26 @@ describe('client transitions', () => {
     api.setResolved.mockRejectedValueOnce(new Error('boom'));
     await useStore.getState().setResolved('t', true);
     expect(useStore.getState().toast).toMatch(/Resolving failed: boom/);
+  });
+
+  it('H hides every card on the cursor’s line at once, and shows them all once they are markers', async () => {
+    const line1 = {
+      selection: { id: 'diff:a.py@0', range: { start: 1, side: 'additions', end: 1, endSide: 'additions' } },
+    } as const;
+    api.setHidden.mockResolvedValue({});
+    api.threads.mockResolvedValue([]);
+    const calls = () => api.setHidden.mock.calls.map(([id, hidden]) => `${id}:${hidden}`).sort();
+    const at = async (threads: CommentThread[]) => {
+      api.setHidden.mockClear();
+      useStore.setState({ snapshot: snap(1, 'working'), threads, focusedThread: null, ...line1 });
+      await useStore.getState().toggleHiddenAtCursor();
+      return calls();
+    };
+    expect(await at([thread({ id: 'one' }), thread({ id: 'two' })])).toEqual(['one:true', 'two:true']);
+    const hidden = (id: string) => ({ ...thread({ id }), hidden: true });
+    expect(await at([hidden('one'), hidden('two')])).toEqual(['one:false', 'two:false']);
+    // One card and one marker: H hides the card and leaves the marker alone.
+    expect(await at([hidden('one'), thread({ id: 'two' })])).toEqual(['two:true']);
   });
 
   it('every toast stays for TOAST_MS, and a new toast restarts the clock', () => {
@@ -1918,7 +1939,7 @@ describe('request ownership', () => {
 });
 
 describe('threads', () => {
-  it('hides resolved threads until asked and resolves the thread under the cursor', async () => {
+  it('resolves the thread under the cursor, and reopens a resolved one from its marker', async () => {
     useStore.setState({
       snapshot: snap(1, 'working', ['a.py']),
       threads: [thread({ id: 'open' }), thread({ id: 'done', resolved: true, anchor: { startLine: 5, endLine: 5 } })],
@@ -1935,10 +1956,7 @@ describe('threads', () => {
     useStore.setState({
       selection: { id: 'diff:a.py@0', range: { start: 5, side: 'additions', end: 5, endSide: 'additions' } },
     });
-    await useStore.getState().toggleResolvedAtCursor();
-    // Resolved threads are invisible, so nothing sits under the cursor.
-    expect(api.setResolved).toHaveBeenCalledTimes(1);
-    useStore.getState().setShowResolved(true);
+    // A resolved thread still sits on its line, as a marker, so R there reopens it.
     await useStore.getState().toggleResolvedAtCursor();
     expect(api.setResolved).toHaveBeenLastCalledWith('done', false);
   });
@@ -1950,7 +1968,7 @@ describe('threads', () => {
     const version = (path: string, prev?: ReturnType<typeof itemVersion>) => {
       const s = useStore.getState();
       const mine = visibleThreads(s).filter((t) => t.anchor.path === path);
-      return itemVersion(prev, itemDeps(s, path, mine, false));
+      return itemVersion(prev, itemDeps(s, path, mine, false, ''));
     };
     const va = version('a.py');
     const vb = version('b.py');
@@ -1970,7 +1988,7 @@ describe('threads', () => {
   it('closing a draft by changing the diff style or clearing the selection re-renders its file', () => {
     useStore.setState({ snapshot: snap(1, 'working', ['a.py']), threads: [] });
     const version = (prev?: ReturnType<typeof itemVersion>) =>
-      itemVersion(prev, itemDeps(useStore.getState(), 'a.py', [], false));
+      itemVersion(prev, itemDeps(useStore.getState(), 'a.py', [], false, ''));
     const idle = version();
     const sel = {
       id: 'diff:a.py@0',
@@ -2018,7 +2036,7 @@ describe('threads', () => {
     useStore.setState({ selection: null });
     // The item re-renders for the composer, and again once it is gone.
     const version = (prev?: ReturnType<typeof itemVersion>) =>
-      itemVersion(prev, itemDeps(useStore.getState(), 'a.py', [], false));
+      itemVersion(prev, itemDeps(useStore.getState(), 'a.py', [], false, ''));
     const open = version();
     expect(await useStore.getState().draftQuote()).toBe('');
     api.addThread.mockResolvedValue([]);

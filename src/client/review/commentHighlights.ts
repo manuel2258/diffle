@@ -1,7 +1,7 @@
 import type { CodeViewHandle } from '@pierre/diffs/react';
 import type { LineAnchor } from '@/shared/protocol.js';
 import type { ResolvedRange } from '@/client/comments/anchor.js';
-import { draftRange, pathFromItemId, visibleThreads } from '@/client/model.js';
+import { draftRange, isThreadHidden, pathFromItemId } from '@/client/model.js';
 import { useStore, type ReviewState } from '@/client/store.js';
 import { isDeletionRow, watchRenderedRows } from './rows.js';
 
@@ -43,10 +43,11 @@ export function markCommentRows(root: ParentNode, ranges: readonly ResolvedRange
  * a file draft has no lines to tint.
  */
 export function tintedRanges(
-  state: Pick<ReviewState, 'threads' | 'showResolved' | 'draft' | 'loaded'>,
+  state: Pick<ReviewState, 'threads' | 'focusedThread' | 'draft' | 'loaded'>,
   path: string,
 ): ResolvedRange[] {
-  const ranges: ResolvedRange[] = visibleThreads(state)
+  const ranges: ResolvedRange[] = state.threads
+    .filter((t) => t.id === state.focusedThread || !isThreadHidden(t))
     .map((t) => t.anchor)
     .filter((a): a is LineAnchor => a.kind === 'line' && a.path === path);
   const draft = state.draft?.path === path ? draftRange(state) : null;

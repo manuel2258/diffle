@@ -25,6 +25,7 @@ mod tests {
             messages,
             resolved,
             resolved_at: None,
+            hidden: None,
             stale,
             stale_from_line: None,
         }

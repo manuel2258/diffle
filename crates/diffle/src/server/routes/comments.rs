@@ -29,6 +29,7 @@ pub fn routes() -> Router<Arc<ApiDeps>> {
         .route("/api/threads/{id}", delete(remove_thread))
         .route("/api/threads/{id}/replies", post(reply))
         .route("/api/threads/{id}/resolved", put(resolve))
+        .route("/api/threads/{id}/hidden", put(hide))
         .route("/api/threads/{id}/messages/{mid}", patch(edit_message).delete(remove_message))
         .route("/api/threads/{id}/messages/{mid}/export", get(export_message))
         .route("/api/github/export", post(github_export))
@@ -155,6 +156,18 @@ struct Resolved {
 async fn resolve(State(d): State<Arc<ApiDeps>>, Path(id): Path<String>, raw: Bytes) -> ApiResult {
     let req: Resolved = body(&raw)?;
     let thread = d.session.comments()?.set_resolved(&id, req.resolved).await?;
+    d.hub.broadcast(ServerMessage::Threads);
+    Ok(Json(thread).into_response())
+}
+
+#[derive(Deserialize)]
+struct Hidden {
+    hidden: bool,
+}
+
+async fn hide(State(d): State<Arc<ApiDeps>>, Path(id): Path<String>, raw: Bytes) -> ApiResult {
+    let req: Hidden = body(&raw)?;
+    let thread = d.session.comments()?.set_hidden(&id, req.hidden).await?;
     d.hub.broadcast(ServerMessage::Threads);
     Ok(Json(thread).into_response())
 }

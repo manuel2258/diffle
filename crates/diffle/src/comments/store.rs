@@ -137,6 +137,18 @@ impl CommentStore {
             let t = find_thread(set, thread_id)?;
             t.resolved = resolved;
             t.resolved_at = resolved.then(now_ms);
+            // A thread done with steps out of the way; a reopened one is back in view.
+            t.hidden = resolved.then_some(true);
+            Ok((t.clone(), true))
+        })
+        .await
+    }
+
+    /// Draws the thread as a marker on its line, or as a card again; `resolved` stays as it is.
+    pub async fn set_hidden(&self, thread_id: &str, hidden: bool) -> Result<CommentThread> {
+        self.mutate(|set| {
+            let t = find_thread(set, thread_id)?;
+            t.hidden = hidden.then_some(true);
             Ok((t.clone(), true))
         })
         .await
@@ -269,6 +281,7 @@ pub(super) fn new_thread(anchor: CommentAnchor, body: String, author: Option<Mes
         messages: vec![new_message(body, author)],
         resolved: false,
         resolved_at: None,
+        hidden: None,
         stale: false,
         stale_from_line: None,
     }

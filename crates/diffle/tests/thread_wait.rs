@@ -91,3 +91,16 @@ async fn rejects_a_timeout_outside_one_second_to_an_hour_and_an_unknown_author()
     assert_eq!(res.status, 400, "{}", res.body);
     s.close().await;
 }
+
+#[tokio::test]
+async fn hiding_a_thread_keeps_it_waiting_on_the_agent() {
+    let s = TestServer::start().await;
+    let t = thread(&s, json!({ "path": "a.txt", "body": "Why a?" })).await;
+    let id = t["id"].as_str().unwrap();
+    let res = s.json("PUT", &format!("/api/threads/{id}/hidden"), json!({ "hidden": true })).await;
+    assert_eq!((res.status, res.json()["hidden"].clone()), (200, json!(true)));
+    let waiting = s.get("/api/threads/wait?timeout=5").await.json();
+    assert_eq!(waiting[0]["id"], t["id"]);
+    assert_eq!(s.json("PUT", &format!("/api/threads/{id}/hidden"), json!({ "hidden": "yes" })).await.status, 400);
+    s.close().await;
+}

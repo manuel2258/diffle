@@ -42,6 +42,7 @@ import {
   imageSides,
   type ImageSides,
   isCollapsed,
+  isThreadHidden,
   itemDeps,
   itemId,
   itemVersion,
@@ -49,7 +50,6 @@ import {
   pathFromItemId,
   rangeLabel,
   viewedState,
-  visibleThreads,
   type ItemVersion,
   commentsOff,
 } from '@/client/model.js';
@@ -66,6 +66,7 @@ import { installSearchHighlights } from '@/client/search/highlight.js';
 import { installCommentHighlights } from './commentHighlights.js';
 import { installWhitespaceMarks, WHITESPACE_CSS } from './whitespace.js';
 import { CommentCard } from './CommentCard.js';
+import { ThreadPip } from './ThreadPip.js';
 import { CommentComposer } from './CommentComposer.js';
 import { PlaceholderBanner, type PlaceholderKind } from './PlaceholderBanner.js';
 import { hostOf } from './host.js';
@@ -75,6 +76,8 @@ export type Annot =
   | { kind: 'placeholder'; placeholder: PlaceholderKind; message: string }
   | { kind: 'image'; path: string; sides: ImageSides }
   | { kind: 'thread'; thread: CommentThread }
+  /** Every hidden thread on one line, behind one marker, so markers never stack. */
+  | { kind: 'markers'; threads: CommentThread[] }
   | { kind: 'draft' };
 
 /** Where jump navigation parks the target line, as a fraction of the viewport height. */
@@ -281,7 +284,7 @@ export function ReviewPane() {
   const gens = useStore((s) => s.gens);
   const fileView = useStore((s) => s.fileView);
   const threads = useStore((s) => s.threads);
-  const showResolved = useStore((s) => s.showResolved);
+  const focusedThread = useStore((s) => s.focusedThread);
   const replyTo = useStore((s) => s.replyTo);
   const editingId = useStore((s) => s.editingId);
   const draft = useStore((s) => s.draft);
@@ -315,15 +318,22 @@ export function ReviewPane() {
     const byPath = new Map(snapshot.changed.map((f) => [f.path, f]));
     const state = { collapsed, viewed, config, snapshot };
     const threadsByPath = new Map<string, CommentThread[]>();
-    for (const t of visibleThreads({ threads, showResolved })) {
+    // Every thread is drawn, resolved ones too; `hidden` decides card or marker, not the panel filter.
+    for (const t of threads) {
       const list = threadsByPath.get(t.anchor.path);
       if (list) list.push(t);
       else threadsByPath.set(t.anchor.path, [t]);
     }
+    // A hidden thread is a marker on its line; the focused one is a card, so a jump to it shows it.
+    const hidden = (t: CommentThread) => t.id !== focusedThread && isThreadHidden(t);
     const versionOf = (path: string, mine: CommentThread[], isCollapsed: boolean) => {
+      const markers = mine
+        .filter(hidden)
+        .map((t) => t.id)
+        .join();
       const v = itemVersion(
         versions.current.get(path),
-        itemDeps({ draft, replyTo, editingId }, path, mine, isCollapsed),
+        itemDeps({ draft, replyTo, editingId }, path, mine, isCollapsed, markers),
       );
       versions.current.set(path, v);
       return v.version;
@@ -332,7 +342,8 @@ export function ReviewPane() {
       const { path, item } = fileView;
       const mine = threadsByPath.get(path) ?? [];
       const one =
-        item && toItem(path, item, undefined, mine, draft, versionOf(path, mine, false), gens[path] ?? 0, false);
+        item &&
+        toItem(path, item, undefined, mine, draft, versionOf(path, mine, false), gens[path] ?? 0, false, hidden);
       return one ? [one] : [];
     }
     const out: CodeViewItem<Annot>[] = [];
@@ -351,11 +362,12 @@ export function ReviewPane() {
         versionOf(path, mine, folded),
         gens[path] ?? 0,
         folded,
+        hidden,
       );
       if (item) out.push(item);
     }
     return out;
-  }, [snapshot, loaded, gens, fileView, threads, showResolved, replyTo, editingId, draft, collapsed, viewed, config]);
+  }, [snapshot, loaded, gens, fileView, threads, focusedThread, replyTo, editingId, draft, collapsed, viewed, config]);
 
   // The scroller is state, not a ref: CodeView mounts after the empty / error branches and remounts per
   // theme, and the effects that listen to it must re-run for each element, not only when the snapshot appears.
@@ -909,6 +921,7 @@ export function ReviewPane() {
       const range = draftRange(useStore.getState());
       return <CommentComposer label={range ? rangeLabel(range) : 'whole file'} />;
     }
+    if (meta.kind === 'markers') return <ThreadPip threads={meta.threads} />;
     return <CommentCard thread={meta.thread} />;
   }, []);
 
@@ -1015,6 +1028,35 @@ function FileViewBar({ path }: { path: string }) {
   );
 }
 
+/**
+ * Line threads where they sit (the end of their range): a card each, except that the hidden threads of
+ * one line share one marker, since markers hang at the same spot and would cover each other. Markers
+ * come first: the viewer stacks a line's annotations in order, and a marker hangs above its own slot,
+ * so after a card it would land on that card instead of on the line.
+ */
+function lineThreads(threads: CommentThread[], hidden: (t: CommentThread) => boolean) {
+  const out: { side: Side; line: number; metadata: Annot }[] = [];
+  const cards: typeof out = [];
+  const markers = new Map<string, CommentThread[]>();
+  for (const t of threads) {
+    if (t.anchor.kind !== 'line') continue;
+    const at = { side: t.anchor.side, line: t.anchor.endLine };
+    if (!hidden(t)) {
+      cards.push({ ...at, metadata: { kind: 'thread', thread: t } });
+      continue;
+    }
+    const key = `${at.side}:${at.line}`;
+    const group = markers.get(key);
+    if (group) group.push(t);
+    else {
+      const threadsHere = [t];
+      markers.set(key, threadsHere);
+      out.push({ ...at, metadata: { kind: 'markers', threads: threadsHere } });
+    }
+  }
+  return [...out, ...cards];
+}
+
 function toItem(
   path: string,
   loaded: Loaded,
@@ -1024,6 +1066,7 @@ function toItem(
   version: number,
   gen: number,
   collapsed: boolean,
+  hidden: (t: CommentThread) => boolean,
 ): CodeViewItem<Annot> | null {
   const id = itemId(changed != null, path, gen);
   // Threads on the file as a whole, and a draft of one, sit above the first line (the viewer's line 0).
@@ -1036,14 +1079,13 @@ function toItem(
     // The viewer drops file-level annotations on the side a deleted or added file does not have.
     const fileSide = changed.status === 'D' ? 'deletions' : 'additions';
     const annotations: DiffLineAnnotation<Annot>[] = fileLevel.map((a) => ({ ...a, side: fileSide }));
-    for (const t of mine) {
-      if (t.anchor.kind !== 'line') continue;
+    // The viewer types an annotation per metadata kind; a union-typed one is each of them.
+    for (const a of lineThreads(mine, hidden))
       annotations.push({
-        side: t.anchor.side === 'old' ? 'deletions' : 'additions',
-        lineNumber: t.anchor.endLine,
-        metadata: { kind: 'thread', thread: t },
-      });
-    }
+        side: a.side === 'old' ? 'deletions' : 'additions',
+        lineNumber: a.line,
+        metadata: a.metadata,
+      } as DiffLineAnnotation<Annot>);
     if (draft?.path === path && draft.selection) {
       const { endLine } = lineBounds(draft.selection);
       const s = draft.selection.range.endSide ?? draft.selection.range.side ?? 'additions';
@@ -1094,10 +1136,8 @@ function toItem(
   }
   // The file view shows the new side whole: only new-side threads have a line to sit on.
   const annotations: LineAnnotation<Annot>[] = fileLevel;
-  for (const t of mine) {
-    if (t.anchor.kind === 'line' && t.anchor.side !== 'old')
-      annotations.push({ lineNumber: t.anchor.endLine, metadata: { kind: 'thread', thread: t } });
-  }
+  for (const a of lineThreads(mine, hidden))
+    if (a.side !== 'old') annotations.push({ lineNumber: a.line, metadata: a.metadata } as LineAnnotation<Annot>);
   if (draft?.path === path && draft.selection && sideOf(draft.selection) === 'new') {
     annotations.push({ lineNumber: lineBounds(draft.selection).endLine, metadata: { kind: 'draft' } });
   }

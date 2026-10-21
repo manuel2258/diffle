@@ -70,29 +70,32 @@ describe('markCommentRows', () => {
     markCommentRows(pre, [anchor('old', 6, 6), anchor('new', 5, 5)]);
     expect(marked(pre)).toEqual(['old:6#', 'old:6', 'new:5#', 'new:5']);
   });
-  it('leaves a resolved thread untinted while resolved cards are hidden', () => {
-    const thread = (id: string, a: CommentAnchor, resolved: boolean): CommentThread => ({
+  it('leaves a hidden thread untinted, resolved or not, unless it is the focused one', () => {
+    const thread = (id: string, a: CommentAnchor, resolved: boolean, hidden?: boolean): CommentThread => ({
       id,
       anchor: a,
       messages: [],
       resolved,
+      ...(hidden ? { hidden } : {}),
       stale: false,
     });
-    const threads = [thread('t1', anchor('new', 1, 1), true), thread('t2', anchor('new', 2, 2), false)];
+    const threads = [thread('t1', anchor('new', 1, 1), true, true), thread('t2', anchor('new', 2, 2), false)];
     const pre = document.createElement('pre');
     pre.append(column([{ line: 1 }, { line: 2 }]));
-    markCommentRows(pre, tintedRanges({ threads, showResolved: false, ...noDraft }, 'a.ts'));
+    markCommentRows(pre, tintedRanges({ threads, focusedThread: null, ...noDraft }, 'a.ts'));
     expect(marked(pre)).toEqual(['new:2#', 'new:2']);
-    markCommentRows(pre, tintedRanges({ threads, showResolved: true, ...noDraft }, 'a.ts'));
+    const shown = [thread('t1', anchor('new', 1, 1), true), threads[1]!];
+    markCommentRows(pre, tintedRanges({ threads: shown, focusedThread: null, ...noDraft }, 'a.ts'));
     expect(marked(pre)).toEqual(['new:1#', 'new:2#', 'new:1', 'new:2']);
-    expect(tintedRanges({ threads, showResolved: true, ...noDraft }, 'b.ts')).toEqual([]);
+    expect(tintedRanges({ threads, focusedThread: 't1', ...noDraft }, 'a.ts')).toHaveLength(2);
+    expect(tintedRanges({ threads, focusedThread: null, ...noDraft }, 'b.ts')).toEqual([]);
   });
   it('tints the open draft only in its own file', () => {
     const draft: Draft = {
       path: 'a.ts',
       selection: { id: 'diff:a.ts@0', range: { start: 70, side: 'additions', end: 75, endSide: 'additions' } },
     };
-    const state = { threads: [], showResolved: false, draft, loaded: {} };
+    const state = { threads: [], focusedThread: null, draft, loaded: {} };
     expect(tintedRanges(state, 'a.ts')).toHaveLength(1);
     expect(tintedRanges(state, 'b.ts')).toEqual([]);
   });

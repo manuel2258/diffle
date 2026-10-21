@@ -6,6 +6,7 @@ import {
   Bot,
   Check,
   Copy,
+  EyeOff,
   GitPullRequestArrow,
   MessageSquare,
   Pencil,
@@ -28,6 +29,7 @@ import { useConfirm } from '@/client/useConfirm.js';
 export function CommentCard({ thread }: { thread: CommentThread }) {
   const deleteThread = useStore((s) => s.deleteThread);
   const setResolved = useStore((s) => s.setResolved);
+  const setThreadHidden = useStore((s) => s.setThreadHidden);
   const replying = useStore((s) => s.replyTo === thread.id);
   const openReply = useStore((s) => s.openReply);
   const closeReply = useStore((s) => s.closeReply);
@@ -121,6 +123,11 @@ export function CommentCard({ thread }: { thread: CommentThread }) {
         >
           {replying ? <X size="0.875rem" /> : <Reply size="0.875rem" />}
         </Button>
+        {a.kind === 'line' && (
+          <Button variant="ghost" icon onClick={() => void setThreadHidden(thread, true)} title="Hide (H)">
+            <EyeOff size="0.875rem" />
+          </Button>
+        )}
         <Button
           variant="ghost"
           icon

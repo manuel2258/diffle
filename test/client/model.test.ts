@@ -22,6 +22,7 @@ import {
   draftRange,
   imageSides,
   isCollapsed,
+  isThreadHidden,
   isViewed,
   iterationPick,
   iterationStep,
@@ -500,5 +501,27 @@ describe('rangeStep', () => {
     expect(rangeStep(focused('c'.repeat(40)), 1)).toBeNull();
     expect(rangeStep(focused('c'.repeat(40)), -1)).toBeUndefined();
     expect(rangeStep({ review: { kind: 'commit', sha: 'a'.repeat(40) }, commits }, 1)).toBeUndefined();
+  });
+});
+
+describe('isThreadHidden', () => {
+  const line = (over: Partial<CommentThread> = {}): CommentThread => ({
+    id: 't1',
+    anchor: { kind: 'line', path: 'a.ts', side: 'new', startLine: 3, endLine: 3, quoted: 'x' },
+    messages: [{ id: 'm', body: 'why?', createdAt: 1, updatedAt: 1 }],
+    resolved: false,
+    stale: false,
+    ...over,
+  });
+
+  it('follows the thread’s own hidden flag, apart from whether it is resolved', () => {
+    expect(isThreadHidden(line())).toBe(false);
+    expect(isThreadHidden(line({ hidden: true }))).toBe(true);
+    expect(isThreadHidden(line({ resolved: true }))).toBe(false);
+    expect(isThreadHidden(line({ resolved: true, hidden: true }))).toBe(true);
+  });
+
+  it('never hides a thread on the whole file, which has no line to mark', () => {
+    expect(isThreadHidden(line({ anchor: { kind: 'file', path: 'a.ts' }, hidden: true }))).toBe(false);
   });
 });

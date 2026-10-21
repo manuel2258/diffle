@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures.js';
 import { clickLine, gotoFile, selectLines, settle } from './browser.js';
-import { readPrompt, readThreads } from './server.js';
+import { readPrompt, readThreads, seedThreads } from './server.js';
 import type { CommentThread } from '@/shared/protocol.js';
 
 test('comments on a line range and lists the thread in the panel', async ({ page, diffle }) => {
@@ -146,4 +146,98 @@ test('an agent waiting on the review gets the new thread, and its reply shows li
 
   await expect(page.getByText('The second pass only normalises the sign.')).toBeVisible();
   await expect(page.getByTitle('Written by an agent through the API')).toBeVisible();
+});
+
+test('hides a thread to a marker on its line, and shows it again from the marker or with H', async ({
+  page,
+  diffle,
+}) => {
+  await seedThreads(diffle.url, [{ path: 'tally/ledger.py', startLine: 3, body: 'Name the unit.' }]);
+  await gotoFile(page, 'tally/ledger.py');
+  // The thread also sits in the panel; its card in the diff is the one with a Hide button.
+  const card = page.getByTitle('Hide (H)');
+  await expect(card).toBeVisible();
+
+  await card.click();
+  await expect(card).toBeHidden();
+  const marker = page.getByRole('button', { name: /^Show the thread \(1 message/ });
+  await expect(marker).toBeVisible();
+  await marker.click();
+  await expect(card).toBeVisible();
+
+  await clickLine(page, 'tally/ledger.py', 3);
+  await page.keyboard.press('H');
+  await expect(card).toBeHidden();
+  await expect(marker).toBeVisible();
+  await page.keyboard.press('H');
+  await expect(card).toBeVisible();
+
+  // A jump from the threads panel shows a hidden thread's card.
+  await page.keyboard.press('H');
+  await expect(card).toBeHidden();
+  await page.locator('aside').last().getByText('Name the unit.').click();
+  await expect(card).toBeVisible();
+});
+
+test('two hidden threads on one line share one marker, which shows both', async ({ page, diffle }) => {
+  await seedThreads(diffle.url, [
+    { path: 'tally/ledger.py', startLine: 3, body: 'Name the unit.' },
+    { path: 'tally/ledger.py', startLine: 3, body: 'And the sign.' },
+  ]);
+  await gotoFile(page, 'tally/ledger.py');
+  const cards = page.getByTitle('Hide (H)');
+  await expect(cards).toHaveCount(2);
+  // The second card slides under the pointer, whose tooltip takes over the button's title; move off first.
+  await cards.first().click();
+  await page.mouse.move(0, 0);
+  await cards.first().click();
+  await expect(cards).toHaveCount(0);
+
+  const marker = page.getByRole('button', { name: 'Show 2 threads (2 messages)' });
+  await expect(marker).toHaveCount(1);
+  await expect(page.getByRole('button', { name: /^Show the thread/ })).toHaveCount(0);
+  await marker.click();
+  await expect(cards).toHaveCount(2);
+
+  // H works on the whole line too: both become the one marker, and back.
+  await page.mouse.move(0, 0);
+  await clickLine(page, 'tally/ledger.py', 3);
+  await page.keyboard.press('H');
+  await expect(cards).toHaveCount(0);
+  await expect(marker).toHaveCount(1);
+  await page.keyboard.press('H');
+  await expect(cards).toHaveCount(2);
+});
+
+test('hidden and resolved threads on one line get separate markers, each showing its own', async ({ page, diffle }) => {
+  const [, done] = await seedThreads(diffle.url, [
+    { path: 'tally/ledger.py', startLine: 3, body: 'Name the unit.' },
+    { path: 'tally/ledger.py', startLine: 3, body: 'Settled already.' },
+  ]);
+  await fetch(new URL(`api/threads/${done!.id}/resolved`, diffle.url), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ resolved: true }),
+  });
+  await gotoFile(page, 'tally/ledger.py');
+  const cards = page.getByTitle('Hide (H)');
+  await expect(cards).toHaveCount(1); // resolving hid the other one: a marker, not gone
+  await cards.click();
+  await page.mouse.move(0, 0);
+  // Hidden is kept with the thread, so it survives a reload.
+  await page.reload();
+  await gotoFile(page, 'tally/ledger.py');
+
+  const hidden = page.getByRole('button', { name: 'Show the thread (1 message, H)' });
+  const resolved = page.getByRole('button', { name: 'Show the resolved thread (1 message)' });
+  await expect(hidden).toHaveCount(1);
+  await expect(resolved).toHaveCount(1);
+  // Show the first thread: the second stays a marker, which still hangs on the code line, above
+  // the card now shown on that line, not under it.
+  await hidden.click();
+  await expect(cards).toHaveCount(1);
+  await expect(resolved).toHaveCount(1);
+  const markerBox = (await resolved.boundingBox())!;
+  const cardBox = (await cards.boundingBox())!;
+  expect(markerBox.y + markerBox.height).toBeLessThanOrEqual(cardBox.y);
 });

@@ -18,6 +18,7 @@ fn thread(id: &str, anchor: CommentAnchor, messages: Vec<CommentMessage>) -> Com
         messages,
         resolved: false,
         resolved_at: None,
+        hidden: None,
         stale: false,
         stale_from_line: None,
     }

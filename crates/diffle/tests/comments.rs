@@ -192,6 +192,28 @@ async fn keeps_an_agents_authorship_on_replies_and_leaves_the_reviewers_unmarked
 }
 
 #[tokio::test]
+async fn keeps_hidden_apart_from_resolved_though_resolving_hides_and_reopening_shows() {
+    let dir = tempfile::tempdir().unwrap();
+    let s = CommentStore::open(dir.path(), "working").await.unwrap();
+    let t = s.add_thread(anchor(), "why?".into()).await.unwrap();
+    assert_eq!(t.hidden, None);
+    let hidden = s.set_hidden(&t.id, true).await.unwrap();
+    assert_eq!((hidden.hidden, hidden.resolved), (Some(true), false));
+    let reopened_file = CommentStore::open(dir.path(), "working").await.unwrap();
+    assert_eq!(reopened_file.get(&t.id).await.unwrap().unwrap().hidden, Some(true));
+
+    s.set_hidden(&t.id, false).await.unwrap();
+    let resolved = s.set_resolved(&t.id, true).await.unwrap();
+    assert_eq!((resolved.hidden, resolved.resolved), (Some(true), true));
+    let shown = s.set_hidden(&t.id, false).await.unwrap();
+    assert_eq!((shown.hidden, shown.resolved), (None, true));
+    s.set_hidden(&t.id, true).await.unwrap();
+    let reopened = s.set_resolved(&t.id, false).await.unwrap();
+    assert_eq!((reopened.hidden, reopened.resolved), (None, false));
+    assert!(matches!(s.set_hidden("nope", true).await, Err(Error::NotFound(_))));
+}
+
+#[tokio::test]
 async fn filters_by_path() {
     let dir = tempfile::tempdir().unwrap();
     let s = CommentStore::open(dir.path(), "working").await.unwrap();

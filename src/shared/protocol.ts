@@ -443,6 +443,11 @@ export const CommentThreadSchema = z.object({
   messages: CommentMessageSchema.array().min(1),
   resolved: z.boolean(),
   resolvedAt: z.number().int().optional(),
+  /**
+   * Drawn as a marker on its line instead of a card. Independent of `resolved`, though resolving a
+   * thread hides it and reopening shows it. Absent: shown.
+   */
+  hidden: z.boolean().optional(),
   /** Relocation failed after a snapshot refresh: the lines left the diff, or the file left the review. */
   stale: z.boolean(),
   /** Original startLine of a line thread, shown in export when stale. */
@@ -931,6 +936,7 @@ export const ConfigUpdateSchema = z.object({
 });
 export type ConfigUpdate = z.infer<typeof ConfigUpdateSchema>;
 export const ResolvedRequestSchema = z.object({ resolved: z.boolean() });
+export const HiddenRequestSchema = z.object({ hidden: z.boolean() });
 export const ViewedBulkRequestSchema = z.object({ entries: ViewedEntrySchema.array() });
 export const FileQuerySchema = z.object({ path: z.string().min(1), rev: SideSchema });
 /**

@@ -117,6 +117,9 @@ Start diffle with `--keep-alive` so it outlives the browser tab, then have the a
 
 Its messages show as **agent**; replying hands a thread back, resolving closes it.
 
+[`skills/diffle-interactive`](skills/diffle-interactive/SKILL.md) is a Claude Code skill that runs this
+loop. Link or copy it into `~/.claude/skills/`, then ask "review this with me in diffle".
+
 ## Send comments to GitHub
 
 The pull request icon adds one thread, or all open threads, to a pending review on the PR.

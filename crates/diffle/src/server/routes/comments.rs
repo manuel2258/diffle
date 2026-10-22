@@ -1,5 +1,6 @@
 //! Comment threads and viewed marks. Each write broadcasts its invalidation.
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::Json;
 use axum::Router;
@@ -13,14 +14,18 @@ use serde::Deserialize;
 use super::{ApiDeps, ApiError, ApiResult, body, query};
 use crate::comments::format::format_prompt;
 use crate::comments::import::parse_imports;
+use crate::comments::wait::awaiting_agent;
 use crate::error::Error;
-use crate::protocol::{ClearThreadsQuery, ReplyCreate, ServerMessage, ThreadQuery, ThreadState, ViewedEntry};
+use crate::protocol::{
+    ClearThreadsQuery, CommentThread, ReplyCreate, ServerMessage, ThreadQuery, ThreadState, ViewedEntry,
+};
 use crate::session::Broadcaster;
 
 pub fn routes() -> Router<Arc<ApiDeps>> {
     Router::new()
         .route("/api/threads", get(threads).post(import).delete(clear))
         .route("/api/threads/export", get(export))
+        .route("/api/threads/wait", get(wait))
         .route("/api/threads/{id}", delete(remove_thread))
         .route("/api/threads/{id}/replies", post(reply))
         .route("/api/threads/{id}/resolved", put(resolve))
@@ -44,6 +49,47 @@ fn thread_query(raw: Option<&str>, default: ThreadState) -> ApiResult<ThreadQuer
 async fn threads(State(d): State<Arc<ApiDeps>>, RawQuery(raw): RawQuery) -> ApiResult {
     let q = thread_query(raw.as_deref(), ThreadState::All)?;
     Ok(Json(d.session.comments()?.threads(&q).await?).into_response())
+}
+
+/// How long `GET /api/threads/wait` holds a request when the caller names no timeout.
+const DEFAULT_WAIT_SECONDS: u64 = 600;
+const MAX_WAIT_SECONDS: u64 = 3600;
+
+#[derive(Deserialize)]
+struct WaitQuery {
+    timeout: Option<String>,
+}
+
+/// An agent in a live review holds this until a thread waits on it: open, anchored, and someone
+/// other than the agent wrote last. `[]` once the timeout passes or the server closes: ask again.
+async fn wait(State(d): State<Arc<ApiDeps>>, RawQuery(raw): RawQuery) -> ApiResult {
+    let q: WaitQuery = query(raw.as_deref())?;
+    let seconds = match q.timeout {
+        None => DEFAULT_WAIT_SECONDS,
+        Some(s) => s.parse::<u64>().ok().filter(|n| (1..=MAX_WAIT_SECONDS).contains(n)).ok_or_else(|| {
+            ApiError::bad_request(format!("timeout: expected whole seconds from 1 to {MAX_WAIT_SECONDS}"))
+        })?,
+    };
+    // Subscribed before the first read, so a change between that read and the wait still wakes it.
+    let mut changes = d.hub.subscribe();
+    let deadline = tokio::time::sleep(Duration::from_secs(seconds));
+    tokio::pin!(deadline);
+    let open = ThreadQuery { path: None, state: Some(ThreadState::Open) };
+    loop {
+        let waiting = awaiting_agent(d.session.comments()?.threads(&open).await?);
+        if !waiting.is_empty() {
+            return Ok(Json(waiting).into_response());
+        }
+        tokio::select! {
+            () = &mut deadline => break,
+            () = d.hub.closed() => break,
+            // Any broadcast may have changed the threads; a lagged receiver re-reads too.
+            changed = changes.recv() => if matches!(changed, Err(tokio::sync::broadcast::error::RecvError::Closed)) {
+                break;
+            },
+        }
+    }
+    Ok(Json(Vec::<CommentThread>::new()).into_response())
 }
 
 async fn export(State(d): State<Arc<ApiDeps>>, RawQuery(raw): RawQuery) -> ApiResult {

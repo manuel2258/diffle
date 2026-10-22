@@ -103,6 +103,19 @@ Generated files start collapsed, as on GitHub: `linguist-generated` in `.gitattr
 them, and `linguist-generated=false` opts a file out. To collapse other files, add auto-viewed
 globs in settings or with `diffle config`.
 
+## Talk it through with an agent
+
+An agent can answer your threads while you review, instead of waiting for the prompt at the end.
+Start diffle with `--keep-alive` so it outlives the browser tab, then have the agent call its API:
+
+- `GET /api/threads/wait?timeout=600` holds the request until a thread waits on the agent (open,
+  not stale, and you wrote last) and returns those threads as JSON, or `[]` once the timeout passes.
+- `POST /api/threads/<id>/replies` with `{"body": "…", "author": "agent"}` answers a thread.
+- `POST /api/threads` with `{"path": "…", "startLine": 3, "body": "…", "author": "agent"}` raises
+  a point of its own.
+
+Its messages show as **agent**; replying hands a thread back, resolving closes it.
+
 ## Send comments to GitHub
 
 The pull request icon adds one thread, or all open threads, to a pending review on the PR.

@@ -1,4 +1,4 @@
-//! The broadcast hub on `/ws`: server → client only.
+//! The broadcast hub on `/ws`: server → client only, plus in-process listeners such as a waiting agent.
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -47,6 +47,21 @@ impl Hub {
             self.count.fetch_sub(1, Ordering::SeqCst) - 1
         };
         self.clients.send_replace(count);
+    }
+
+    /// Every broadcast from now on, for an in-process listener.
+    pub fn subscribe(&self) -> broadcast::Receiver<String> {
+        self.messages.subscribe()
+    }
+
+    /// Receivers of broadcasts right now: connected clients plus in-process listeners.
+    pub fn listener_count(&self) -> usize {
+        self.messages.receiver_count()
+    }
+
+    /// Resolves once the server closes, so a held request lets the graceful shutdown finish.
+    pub async fn closed(&self) {
+        let _ = self.closing.subscribe().wait_for(|closed| *closed).await;
     }
 
     /// Ends every client connection, now and for any that connect later.

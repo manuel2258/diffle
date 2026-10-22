@@ -1,6 +1,7 @@
 import { expect, test } from './fixtures.js';
 import { clickLine, gotoFile, selectLines, settle } from './browser.js';
 import { readPrompt, readThreads } from './server.js';
+import type { CommentThread } from '@/shared/protocol.js';
 
 test('comments on a line range and lists the thread in the panel', async ({ page, diffle }) => {
   await gotoFile(page, 'tally/ledger.py');
@@ -119,4 +120,30 @@ test('regression: closing a composer keeps its text until the comment is posted'
   await composer.press('Escape');
   await page.keyboard.press('C');
   await expect(composer).toHaveValue('About the whole file.');
+});
+
+test('an agent waiting on the review gets the new thread, and its reply shows live as the agent’s', async ({
+  page,
+  diffle,
+}) => {
+  const waiting = fetch(new URL('api/threads/wait?timeout=30', diffle.url)).then(
+    (r) => r.json() as Promise<CommentThread[]>,
+  );
+  await gotoFile(page, 'tally/ledger.py');
+  await selectLines(page, 'tally/ledger.py', 3, 3);
+  const composer = page.getByPlaceholder('Leave a comment…');
+  await composer.fill('Why parse refunds twice?');
+  await composer.press('Control+Enter');
+
+  const [thread] = await waiting;
+  expect(thread?.messages.map((m) => m.body)).toEqual(['Why parse refunds twice?']);
+  const reply = await fetch(new URL(`api/threads/${thread!.id}/replies`, diffle.url), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ body: 'The second pass only normalises the sign.', author: 'agent' }),
+  });
+  expect(reply.status).toBe(201);
+
+  await expect(page.getByText('The second pass only normalises the sign.')).toBeVisible();
+  await expect(page.getByTitle('Written by an agent through the API')).toBeVisible();
 });

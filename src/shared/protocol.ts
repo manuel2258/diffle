@@ -419,9 +419,17 @@ export type FileAnchor = z.infer<typeof FileAnchorSchema>;
 export const CommentAnchorSchema = z.discriminatedUnion('kind', [LineAnchorSchema, FileAnchorSchema]);
 export type CommentAnchor = z.infer<typeof CommentAnchorSchema>;
 
+/**
+ * Who wrote a message. Absent: the person reviewing in the browser. An agent marks its replies
+ * through the API so a live review knows which threads still wait on it.
+ */
+export const MessageAuthorSchema = z.enum(['agent']);
+export type MessageAuthor = z.infer<typeof MessageAuthorSchema>;
+
 export const CommentMessageSchema = z.object({
   id: z.string(),
   body: z.string(),
+  author: MessageAuthorSchema.optional(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
 });
@@ -457,6 +465,7 @@ export const ThreadCreateSchema = z
     endLine: z.number().int().positive().optional(),
     body: z.string().refine((body) => body.trim().length > 0, 'body required'),
     quoted: z.string().optional(),
+    author: MessageAuthorSchema.optional(),
   })
   .refine((t) => t.startLine == null || t.endLine == null || t.endLine >= t.startLine, {
     path: ['endLine'],
@@ -470,6 +479,7 @@ export type ThreadCreate = z.infer<typeof ThreadCreateSchema>;
 
 export const ReplyCreateSchema = z.object({
   body: z.string().refine((body) => body.trim().length > 0, 'body required'),
+  author: MessageAuthorSchema.optional(),
 });
 export type ReplyCreate = z.infer<typeof ReplyCreateSchema>;
 

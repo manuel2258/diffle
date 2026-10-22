@@ -1,10 +1,10 @@
 //! One realistic export, pinned as a snapshot, so a change to the format is judged by reading the
 //! prompt an agent would receive.
 use diffle::comments::format::format_prompt;
-use diffle::protocol::{CommentAnchor, CommentMessage, CommentThread, Side};
+use diffle::protocol::{CommentAnchor, CommentMessage, CommentThread, MessageAuthor, Side};
 
 fn msg(id: &str, body: &str, at: i64) -> CommentMessage {
-    CommentMessage { id: id.into(), body: body.into(), created_at: at, updated_at: at }
+    CommentMessage { id: id.into(), body: body.into(), author: None, created_at: at, updated_at: at }
 }
 
 fn line(path: &str, side: Side, start: i64, end: i64, quoted: &str) -> CommentAnchor {
@@ -55,6 +55,22 @@ fn renders_a_thread_on_the_whole_file_with_a_file_prefix_and_no_quote_its_fences
     );
     let stale = CommentThread { stale: true, ..file };
     assert!(format_prompt(&[stale]).starts_with("(file) (stale) src/a.py\n"));
+}
+
+#[test]
+fn marks_an_agents_messages_so_the_conversation_keeps_its_voices_apart() {
+    let agent = |id, body| CommentMessage { author: Some(MessageAuthor::Agent), ..msg(id, body, 1) };
+    let talk =
+        basic(|t| t.messages = vec![msg("a", "Why a dict?", 1), agent("b", "Lookups by key."), msg("c", "Fine.", 1)]);
+    assert_eq!(
+        format_prompt(&[talk]),
+        "src/a.py:3\n\n> def foo():\n\nWhy a dict?\n\n(agent) Lookups by key.\n\nFine.\n\n---\n"
+    );
+    let own = basic(|t| {
+        t.anchor = CommentAnchor::File { path: "src/a.py".into() };
+        t.messages = vec![agent("a", "Worth a test?")];
+    });
+    assert_eq!(format_prompt(&[own]), "(file) src/a.py\n\n(agent) Worth a test?\n\n---\n");
 }
 
 #[test]

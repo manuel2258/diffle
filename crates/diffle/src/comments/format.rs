@@ -4,7 +4,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use super::anchor::compare_threads;
-use crate::protocol::{CommentAnchor, CommentMessage, CommentThread, Side};
+use crate::protocol::{CommentAnchor, CommentMessage, CommentThread, MessageAuthor, Side};
 
 static SUGGESTION_FENCE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?m)^```suggestion[^\n]*\n([\s\S]*?)\n?^```[ \t]*$").unwrap());
@@ -15,7 +15,7 @@ static SUGGESTION_FENCE: LazyLock<Regex> =
 ///
 ///   > quoted line        (absent for a file thread)
 ///
-///   body                 (a thread's messages joined by a blank line)
+///   body                 (a thread's messages joined by a blank line; an agent's starts with `(agent)`)
 ///
 ///   ---
 ///
@@ -31,7 +31,7 @@ fn format_one(t: &CommentThread) -> String {
     let (path, side, start, end, quoted) = match &t.anchor {
         CommentAnchor::File { path } => {
             let header = format!("(file) {}{path}", if t.stale { "(stale) " } else { "" });
-            let body: Vec<&str> = t.messages.iter().map(|m| m.body.trim()).collect();
+            let body: Vec<String> = t.messages.iter().map(|m| format!("{}{}", byline(m), m.body.trim())).collect();
             return format!("{header}\n\n{}\n\n---\n", body.join("\n\n"));
         }
         CommentAnchor::Line { path, side, start_line, end_line, quoted } => {
@@ -49,8 +49,13 @@ fn format_one(t: &CommentThread) -> String {
     let prefix = if prefixes.is_empty() { String::new() } else { prefixes.join(" ") + " " };
     let quote: Vec<String> =
         quoted.split('\n').map(|l| if l.is_empty() { ">".to_owned() } else { format!("> {l}") }).collect();
-    let body: Vec<String> = t.messages.iter().map(|m| format_message(m, quoted)).collect();
+    let body: Vec<String> = t.messages.iter().map(|m| format!("{}{}", byline(m), format_message(m, quoted))).collect();
     format!("{prefix}{path}:{range}\n\n{}\n\n{}\n\n---\n", quote.join("\n"), body.join("\n\n"))
+}
+
+/// Marks an agent's own messages, so a prompt that carries the conversation tells the voices apart.
+fn byline(m: &CommentMessage) -> &'static str {
+    if m.author == Some(MessageAuthor::Agent) { "(agent) " } else { "" }
 }
 
 fn format_message(m: &CommentMessage, quoted: &str) -> String {

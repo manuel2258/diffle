@@ -3,6 +3,7 @@ import { twMerge } from 'tailwind-merge';
 import { Button } from '@/client/ui/Button.js';
 import {
   AlertTriangle,
+  Bot,
   Check,
   Copy,
   GitPullRequestArrow,
@@ -160,25 +161,33 @@ function Message({ thread, message, first }: { thread: CommentThread; message: C
   const setText = (t: string) => key && setUnsent(key, t === message.body ? '' : t);
   const del = useConfirm(() => void deleteMessage(thread.id, message.id));
   const threaded = thread.messages.length > 1;
+  const byAgent = message.author === 'agent';
   const save = () => {
     void editMessage(thread.id, message.id, text);
     setEditingId(null);
   };
   return (
     <div className="px-2.5 py-2 data-[first=false]:border-t data-[first=false]:border-border" data-first={first}>
-      {threaded && (
+      {(threaded || byAgent) && (
         <div className="mb-[2px] flex items-center gap-1.5 text-[0.6875rem] text-muted">
+          {byAgent && (
+            <span className="inline-flex items-center gap-0.75 text-accent" title="Written by an agent through the API">
+              <Bot size="0.75rem" /> agent
+            </span>
+          )}
           <span className="flex-1" />
-          <CopyMessageButton threadId={thread.id} messageId={message.id} size="0.75rem" />
-          <Button
-            variant="ghost"
-            icon
-            onClick={() => setEditingId(editing ? null : message.id)}
-            title={editing ? 'Cancel' : 'Edit (e)'}
-          >
-            {editing ? <X size="0.75rem" /> : <Pencil size="0.75rem" />}
-          </Button>
-          {!first && (
+          {threaded && <CopyMessageButton threadId={thread.id} messageId={message.id} size="0.75rem" />}
+          {threaded && (
+            <Button
+              variant="ghost"
+              icon
+              onClick={() => setEditingId(editing ? null : message.id)}
+              title={editing ? 'Cancel' : 'Edit (e)'}
+            >
+              {editing ? <X size="0.75rem" /> : <Pencil size="0.75rem" />}
+            </Button>
+          )}
+          {threaded && !first && (
             <Button
               variant="ghost"
               danger

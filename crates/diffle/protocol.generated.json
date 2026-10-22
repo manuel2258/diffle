@@ -159,6 +159,9 @@
         "body": {
           "type": "string"
         },
+        "author": {
+          "$ref": "#/$defs/MessageAuthor"
+        },
         "createdAt": {
           "type": "integer",
           "minimum": -9007199254740991,
@@ -1362,6 +1365,13 @@
       ],
       "description": "`GET /api/lsp/symbols`: a file's outline with `path`, else the repository's symbols matching `q`."
     },
+    "MessageAuthor": {
+      "type": "string",
+      "enum": [
+        "agent"
+      ],
+      "description": "Who wrote a message. Absent: the person reviewing in the browser. An agent marks its replies\nthrough the API so a live review knows which threads still wait on it."
+    },
     "MessagePatch": {
       "type": "object",
       "properties": {
@@ -1759,6 +1769,9 @@
       "properties": {
         "body": {
           "type": "string"
+        },
+        "author": {
+          "$ref": "#/$defs/MessageAuthor"
         }
       },
       "required": [
@@ -2205,6 +2218,9 @@
         },
         "quoted": {
           "type": "string"
+        },
+        "author": {
+          "$ref": "#/$defs/MessageAuthor"
         }
       },
       "required": [

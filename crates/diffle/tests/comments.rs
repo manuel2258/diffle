@@ -5,7 +5,9 @@ use std::path::Path;
 use diffle::comments::import::parse_imports;
 use diffle::comments::{AnchorSource, CommentStore, ReviewView, SideView};
 use diffle::error::{Error, Result};
-use diffle::protocol::{CommentAnchor, CommentThread, Side, ThreadCreate, ThreadQuery, ThreadState, ViewedEntry};
+use diffle::protocol::{
+    CommentAnchor, CommentThread, MessageAuthor, Side, ThreadCreate, ThreadQuery, ThreadState, ViewedEntry,
+};
 use serde_json::{Value, json};
 
 fn anchor() -> CommentAnchor {
@@ -172,6 +174,21 @@ async fn replies_edits_removes_messages_and_threads_resolves_and_clears() {
     s.add_thread(anchor(), "hello".into()).await.unwrap();
     s.clear().await.unwrap();
     assert!(s.threads(&all()).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn keeps_an_agents_authorship_on_replies_and_leaves_the_reviewers_unmarked() {
+    let dir = tempfile::tempdir().unwrap();
+    let s = CommentStore::open(dir.path(), "working").await.unwrap();
+    let t = s.add_thread(anchor(), "why?".into()).await.unwrap();
+    s.reply_as(&t.id, "because".into(), Some(MessageAuthor::Agent)).await.unwrap();
+    s.reply(&t.id, "ok".into()).await.unwrap();
+    let reopened = CommentStore::open(dir.path(), "working").await.unwrap();
+    let got = reopened.get(&t.id).await.unwrap().unwrap();
+    let authors: Vec<_> = got.messages.iter().map(|m| m.author).collect();
+    assert_eq!(authors, [None, Some(MessageAuthor::Agent), None]);
+    // A reviewer's message is stored as before: no author key at all.
+    assert!(serde_json::to_value(&got.messages[0]).unwrap().get("author").is_none());
 }
 
 #[tokio::test]

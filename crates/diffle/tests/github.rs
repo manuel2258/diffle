@@ -82,7 +82,13 @@ fn thread_with(id: &str, anchor: CommentAnchor, body: &str, resolved: bool, stal
     CommentThread {
         anchor,
         id: id.into(),
-        messages: vec![CommentMessage { id: format!("{id}-m"), body: body.into(), created_at: 1, updated_at: 1 }],
+        messages: vec![CommentMessage {
+            id: format!("{id}-m"),
+            body: body.into(),
+            author: None,
+            created_at: 1,
+            updated_at: 1,
+        }],
         resolved,
         resolved_at: None,
         stale,
@@ -143,8 +149,14 @@ fn build_review_with_ids_posts_the_named_threads_resolved_included_and_reports_u
 #[test]
 fn format_body_joins_messages_and_keeps_suggestion_fences_verbatim() {
     let body = format_body(&[
-        CommentMessage { id: "1".into(), body: "Batch this.".into(), created_at: 1, updated_at: 1 },
-        CommentMessage { id: "2".into(), body: "```suggestion\nfoo()\n```".into(), created_at: 2, updated_at: 2 },
+        CommentMessage { id: "1".into(), body: "Batch this.".into(), author: None, created_at: 1, updated_at: 1 },
+        CommentMessage {
+            id: "2".into(),
+            body: "```suggestion\nfoo()\n```".into(),
+            author: None,
+            created_at: 2,
+            updated_at: 2,
+        },
     ]);
     assert_eq!(body, "Batch this.\n\n---\n\n```suggestion\nfoo()\n```");
 }

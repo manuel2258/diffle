@@ -1,14 +1,9 @@
----
-name: diffle-interactive
-description: >
-  Turn the current Claude Code session into the agent answering a live diffle review. Use when
-  the user wants to review changes in diffle together with you and have you respond to their
-  comments as they write them — "review this with me in diffle", "start a live diffle review",
-  "watch my diffle comments and answer them", "diffle, interactive". You launch diffle for this
-  repository, wait on its API for threads that need you, answer each one in its thread, edit the
-  working tree when a comment asks for a change, and post your own open points as threads — all
-  from this session, keeping the conversation's context.
----
+# Live review with diffle
+
+Instructions for a coding agent that answers a diffle review while the human writes it: "review
+this with me in diffle". You launch diffle for this repository, wait on its API for threads that
+need you, answer each one in its thread, edit the working tree when a comment asks for a change,
+and post your own open points as threads.
 
 You answer the threads the human writes in diffle while they review. Every thread they open or
 reply to is addressed to you. You stay in **this** session for the whole review; do not hand it to a
@@ -28,11 +23,11 @@ Ask the user what to review if it is not obvious. Your edits show up live only w
 is the worktree: `working` (the default), or a range ending in `worktree` such as
 `main..worktree`. A branch or commit comparison is frozen, so say so if they want fixes.
 
-Launch it in the background, keeping its log (`<log>`, a file in your scratch or temp directory) to
+Start it as a background process, keeping its log (`<log>`, a file in your scratch or temp directory) to
 read the URL:
 
 ```
-cd "<repo>" && NO_COLOR=1 diffle working --keep-alive > "<log>" 2>&1   # run_in_background
+cd "<repo>" && NO_COLOR=1 diffle working --keep-alive > "<log>" 2>&1
 ```
 
 `--keep-alive` keeps the server up when the browser tab closes. Then read the URL and pin it as
@@ -49,8 +44,10 @@ Confirm it serves your repository: `curl -s "<BASE>/api/snapshot"` must report `
 ## Step 2 — Wait for threads that need you
 
 ```
-curl -s "<BASE>/api/threads/wait?timeout=540"      # Bash timeout 600000
+curl -s "<BASE>/api/threads/wait?timeout=540"
 ```
+
+Give the command a timeout above 540 seconds, or your tool cuts the wait short.
 
 It holds the request until at least one thread waits on you and returns those threads as a JSON
 array: open, not stale, and the human wrote the last message. The server decides; there is no

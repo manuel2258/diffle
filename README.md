@@ -117,8 +117,9 @@ Start diffle with `--keep-alive` so it outlives the browser tab, then have the a
 
 Its messages show as **agent**; replying hands a thread back, resolving closes it.
 
-[`skills/diffle-interactive`](skills/diffle-interactive/SKILL.md) is a Claude Code skill that runs this
-loop. Link or copy it into `~/.claude/skills/`, then ask "review this with me in diffle".
+[`skills/diffle-interactive`](skills/diffle-interactive/SKILL.md) holds instructions that run this
+loop. Give them to your agent the way it takes skills or rules, then ask "review this with me in
+diffle".
 
 ## Send comments to GitHub
 

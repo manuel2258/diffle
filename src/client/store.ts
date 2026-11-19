@@ -36,6 +36,7 @@ import { api } from './api.js';
 import { isNotFound } from './http.js';
 import { anchorFromRange, sideOf } from './comments/anchor.js';
 import { anchorPath } from './comments/threads.js';
+import { followSelection } from './followLine.js';
 import {
   buildNav,
   cursorFromSelection,
@@ -867,7 +868,10 @@ export const useStore = create<ReviewState>((set, get) => {
     );
   };
 
-  /** One patch request for `paths` (non-binary changed files), committed on arrival and queued for hydration. */
+  /**
+   * One patch request for `paths` (non-binary changed files), committed on arrival and queued for
+   * hydration. A reload that moved only the new side keeps the selection on its code.
+   */
   const loadBatch = async (snap: Snapshot, paths: string[], g: number) => {
     const byPath = new Map(snap.changed.map((f) => [f.path, f]));
     const loaded: Record<string, Loaded> = {};
@@ -887,7 +891,12 @@ export const useStore = create<ReviewState>((set, get) => {
     }
     if (!current(g)) return;
     // First paint: the parsed patches, straight away.
-    set((s) => ({ loaded: { ...s.loaded, ...loaded }, ...regen(s, Object.keys(loaded)) }));
+    set((s) => {
+      const next = { ...s.loaded, ...loaded };
+      const path = s.selection && pathFromItemId(s.selection.id);
+      const selection = s.selection && path ? followSelection(s.selection, s.loaded[path], next[path]) : s.selection;
+      return { loaded: next, ...regen({ ...s, selection }, Object.keys(loaded)) };
+    });
     // A submodule's patch is the commit-id change itself; there is no file to hydrate from.
     hydrate(
       paths.filter((p) => !byPath.get(p)!.submodule),

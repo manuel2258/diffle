@@ -1,7 +1,10 @@
 // The review as it opens on the feature branch: the file tree, every kind of changed file,
 // and the layouts a reader switches between. Judge changes in the screenshots under
 // `__snapshots__/review.spec.ts/`.
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
+import { MAIN_BRANCH } from '../fixture/repo.js';
 import { expect, test } from './fixtures.js';
 import { clickLine, collapsed, filePaths, gotoFile, header, waitForHighlight, walkToFile } from './browser.js';
 
@@ -228,4 +231,24 @@ test('hides the tree and the panel for a wide diff', async ({ page }) => {
   await page.keyboard.press('Control+Shift+b');
   await expect(page.locator('file-tree-container')).toHaveCount(0);
   await expect(page).toHaveScreenshot('diff-only.png');
+});
+
+test.describe('while the agent edits the worktree', () => {
+  test.use({ revs: [MAIN_BRANCH], args: ['--watch'] });
+
+  test('keeps the cursor on its code, at its height, when lines land above it', async ({ page, repo }) => {
+    await clickLine(page, 'tally/ledger.py', 33);
+    // In the split layout both columns mark the cursor's row; the new side comes second.
+    const cursor = page.locator('[data-line][data-selected-line]').last();
+    await expect(cursor).toContainText('amount = self.unit_price');
+    const y = (await cursor.boundingBox())!.y;
+
+    // Five lines in a hunk of their own above the cursor, as an agent's edit adds them.
+    const file = join(repo, 'tally/ledger.py');
+    const lines = (await readFile(file, 'utf8')).split('\n');
+    await writeFile(file, [...lines.slice(0, 8), '# a', '# b', '# c', '# d', '# e', ...lines.slice(8)].join('\n'));
+    await expect(cursor).toHaveAttribute('data-line', '38', { timeout: 15000 });
+    await expect(cursor).toContainText('amount = self.unit_price');
+    expect(Math.abs((await cursor.boundingBox())!.y - y)).toBeLessThanOrEqual(1);
+  });
 });

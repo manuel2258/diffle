@@ -49,6 +49,7 @@ import {
   isThreadHidden,
   itemDeps,
   itemId,
+  itemIdOf,
   itemVersion,
   orderedPaths,
   pathFromItemId,
@@ -63,6 +64,7 @@ import { useStore, type CodeDraft, type Loaded, type ReviewState } from '@/clien
 import { gridColumns, useViews } from '@/client/views/state.js';
 import { installInlineWheel, revealInline } from './inline.js';
 import { rowOf, topRow } from './rows.js';
+import { followable, followLine } from '@/client/followLine.js';
 import { overflow, reviewGeometry } from './geometry.js';
 import { installOccurrenceHighlights, occurrenceControl } from '@/client/lsp/occurrences.js';
 import { focusToken, onSelectionChanged, setViewer, wordsIn } from '@/client/lsp/wordNav.js';
@@ -568,6 +570,53 @@ export function ReviewPane() {
     };
   }, [geometry]);
 
+  // An edit to a file under the reader (the agent's, say) reloads its diff and grows or shrinks the rows
+  // above them. The code they were on holds its pixel: the cursor's row while it is on screen, else the
+  // row under the top edge, measured here before React renders the new diff and requested at its line
+  // there (see `followLine`), the way a display toggle holds the viewport above.
+  useEffect(
+    () =>
+      useStore.subscribe((s, prev) => {
+        if (s.loaded === prev.loaded) return;
+        // A fresh parse replacing a diff on screen; hydrating one in place keeps its rows.
+        const reloaded = (path: string) => {
+          const next = s.loaded[path];
+          return next?.kind === 'diff' && next.fileDiff.isPartial && followable(prev.loaded[path], next);
+        };
+        if (!Object.keys(s.loaded).some(reloaded)) return;
+        const scroller = containerRef.current;
+        const items = viewerRef.current?.getInstance()?.getRenderedItems();
+        if (!scroller || !items) return;
+        const box = scroller.getBoundingClientRect();
+        const top = box.top + geometry.itemMetrics.diffHeaderHeight;
+        const roots = items.map((r) => ({ id: r.id, root: r.element.shadowRoot ?? r.element }));
+        const anchor = (() => {
+          const sel = prev.selection;
+          const root = sel && roots.find((r) => r.id === sel.id)?.root;
+          const row = root && rowOf(root, sel.range.end, sideOf(sel));
+          const rect = row?.getBoundingClientRect();
+          if (sel && rect && rect.bottom > top && rect.top < box.bottom)
+            return { id: sel.id, line: sel.range.end, side: sideOf(sel), offset: rect.top - top };
+          return topRow(roots, top, box.bottom);
+        })();
+        if (!anchor) return;
+        const path = pathFromItemId(anchor.id);
+        const pair = anchor.side === 'new' && reloaded(path) ? followable(prev.loaded[path], s.loaded[path]) : null;
+        const line = pair ? followLine(...pair, anchor.line) : anchor.line;
+        useStore.setState((st) => ({
+          scrollTarget: {
+            id: itemIdOf(st, path),
+            line,
+            side: anchor.side,
+            align: 'keep',
+            offset: anchor.offset,
+            nonce: (st.scrollTarget?.nonce ?? 0) + 1,
+          },
+        }));
+      }),
+    [geometry],
+  );
+
   // Reveal a line hidden in collapsed context: bring the item into the virtual window,
   // ask its instance to expand around the line, then center it.
   useEffect(() => {
@@ -860,9 +909,21 @@ export function ReviewPane() {
     };
   }, [scrollTarget, geometry, scrollPlan]);
 
+  // The selection the viewer holds: the one handed down at its last render. Its own layout effects
+  // run before this one, so while it takes new items this still names the previous selection.
+  const shown = useRef(selection);
+  useLayoutEffect(() => {
+    shown.current = selection;
+  }, [selection]);
   const onSelectedLinesChange = useCallback(
     (sel: CodeViewLineSelection | null) => {
       if (sel == null && swapping.current) return;
+      // A reload gives the file's item a new id. The viewer gets the new items before the moved
+      // selection, so it drops the one it held on the old id; the store has already moved it.
+      const held = shown.current;
+      const now = useStore.getState().selection;
+      if (sel == null && held && now && held.id !== now.id && pathFromItemId(held.id) === pathFromItemId(now.id))
+        return;
       setSelection(sel);
       if (sel) setActivePath(pathFromItemId(sel.id));
     },

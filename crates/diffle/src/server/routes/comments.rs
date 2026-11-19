@@ -21,8 +21,8 @@ use crate::comments::format::format_prompt;
 use crate::comments::import::parse_imports;
 use crate::error::Error;
 use crate::protocol::{
-    Activity, ActivityQuery, AuthorQuery, ClearThreadsQuery, CommentAuthor, HiddenRequest, MessagePatch, ReplyCreate,
-    ResolvedRequest, ServerMessage, ThreadList, ThreadQuery, ThreadState, ViewedEntry,
+    Activity, ActivityQuery, ActivityUntil, AuthorQuery, ClearThreadsQuery, CommentAuthor, HiddenRequest, MessagePatch,
+    ReplyCreate, ResolvedRequest, ServerMessage, ThreadList, ThreadQuery, ThreadState, ViewedEntry,
 };
 use crate::session::Broadcaster;
 
@@ -156,7 +156,8 @@ async fn clear(State(d): State<Arc<ApiDeps>>, RawQuery(raw): RawQuery) -> ApiRes
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
-/// Waits for the next change after `since` not by `ignore`, then answers what changed; see `Activity`.
+/// Waits for the next change after `since` (or the cursor kept for `as`) not by `ignore` that
+/// `until` names, then answers what changed; see `Activity`.
 async fn activity(State(d): State<Arc<ApiDeps>>, RawQuery(raw): RawQuery) -> ApiResult {
     let q: ActivityQuery = query(raw.as_deref())?;
     let timeout = match q.timeout.as_deref() {
@@ -165,14 +166,25 @@ async fn activity(State(d): State<Arc<ApiDeps>>, RawQuery(raw): RawQuery) -> Api
             secs.parse().map_err(|_| ApiError::bad_request(format!("timeout: not a number of seconds: {secs}")))?,
         )),
     };
-    let Some(since) = q.since else { return Ok(Json(everything(&d, false).await?).into_response()) };
+    let wake = q.until.unwrap_or(ActivityUntil::Any);
+    if q.as_.is_some() && (q.since.is_some() || q.ignore.is_some()) {
+        return Err(ApiError::bad_request("as: not with since or ignore"));
+    }
+    let (since, ignore) = match (q.as_, q.since) {
+        (Some(author), _) => match d.session.activity().held(author) {
+            Some(cursor) => (cursor.to_string(), Some(author)),
+            None => return Ok(Json(held_by(&d, q.as_, everything(&d, false).await?)).into_response()),
+        },
+        (None, Some(since)) => (since, q.ignore),
+        (None, None) => return Ok(Json(everything(&d, false).await?).into_response()),
+    };
     let cursor = Cursor::parse(&since).ok_or_else(|| ApiError::bad_request(format!("since: not a cursor: {since}")))?;
     // Subscribed before the first look, so a change between a look and the wait still wakes it.
     let mut messages = d.hub.messages();
     // A deadline past what the clock can name is no deadline.
     let deadline = timeout.and_then(|t| Instant::now().checked_add(t));
     let found = loop {
-        match d.session.activity().since(&cursor, q.ignore) {
+        match d.session.activity().since_until(&cursor, ignore, wake) {
             Since::Lost => break everything(&d, true).await?,
             // After a key switch, the threads named belong to the set left behind.
             Since::Changed { through, threads, key } => {
@@ -188,7 +200,15 @@ async fn activity(State(d): State<Arc<ApiDeps>>, RawQuery(raw): RawQuery) -> Api
             },
         }
     };
-    Ok(Json(found).into_response())
+    Ok(Json(held_by(&d, q.as_, found)).into_response())
+}
+
+/// Moves the cursor kept for `author` to where `found` ends, so their next call starts there.
+fn held_by(d: &ApiDeps, author: Option<CommentAuthor>, found: Activity) -> Activity {
+    if let (Some(author), Some(cursor)) = (author, Cursor::parse(&found.cursor)) {
+        d.session.activity().hold(author, cursor);
+    }
+    found
 }
 
 async fn until(deadline: Option<Instant>) {

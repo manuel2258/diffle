@@ -56,6 +56,14 @@
           "$ref": "#/$defs/CommentAuthor",
           "description": "An author whose changes do not end the wait; they are still reported once something else does."
         },
+        "as": {
+          "$ref": "#/$defs/CommentAuthor",
+          "description": "The server keeps this author's cursor in place of `since`, and ignores their changes: each answer\nmoves it, so the next call reports what came after. The first call of a run answers the current\nstate at once. Not with `since` or `ignore`."
+        },
+        "until": {
+          "$ref": "#/$defs/ActivityUntil",
+          "description": "Which changes end the wait (default `any`); the answer still reports every change since the cursor."
+        },
         "timeout": {
           "type": "string",
           "pattern": "^[0-9]+$",
@@ -63,6 +71,14 @@
         }
       },
       "description": "`GET /api/threads/activity`. Without `since`, answers the current state and a fresh cursor at once;\nwith it, waits until a thread or the comment key changed after the cursor, by anyone but `ignore`.\nWithout `timeout`, waits until then or until the server closes."
+    },
+    "ActivityUntil": {
+      "type": "string",
+      "enum": [
+        "message",
+        "any"
+      ],
+      "description": "Which changes end an activity wait: a message (a new thread, a reply, an edit), or any change."
     },
     "ApiError": {
       "type": "object",

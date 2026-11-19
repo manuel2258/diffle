@@ -1228,6 +1228,10 @@ export const ServerInfoSchema = z.object({
 });
 export type ServerInfo = z.infer<typeof ServerInfoSchema>;
 
+/** Which changes end an activity wait: a message (a new thread, a reply, an edit), or any change. */
+export const ActivityUntilSchema = z.enum(['message', 'any']);
+export type ActivityUntil = z.infer<typeof ActivityUntilSchema>;
+
 /**
  * `GET /api/threads/activity`. Without `since`, answers the current state and a fresh cursor at once;
  * with it, waits until a thread or the comment key changed after the cursor, by anyone but `ignore`.
@@ -1238,6 +1242,14 @@ export const ActivityQuerySchema = z.object({
   since: z.string().optional(),
   /** An author whose changes do not end the wait; they are still reported once something else does. */
   ignore: CommentAuthorSchema.optional(),
+  /**
+   * The server keeps this author's cursor in place of `since`, and ignores their changes: each answer
+   * moves it, so the next call reports what came after. The first call of a run answers the current
+   * state at once. Not with `since` or `ignore`.
+   */
+  as: CommentAuthorSchema.optional(),
+  /** Which changes end the wait (default `any`); the answer still reports every change since the cursor. */
+  until: ActivityUntilSchema.optional(),
   /** Seconds to wait at most. */
   timeout: z
     .string()

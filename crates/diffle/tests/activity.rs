@@ -196,3 +196,54 @@ async fn answers_closed_when_the_server_closes() {
     let r = waiting.await.unwrap();
     assert_eq!((&r["cursor"], &r["closed"], &r["threads"]), (&json!(since), &json!(true), &json!([])));
 }
+
+#[tokio::test]
+async fn keeps_the_agents_cursor_answering_everything_first_then_what_came_after() {
+    let s = TestServer::start().await;
+    let a = open(&s, json!({ "path": "a.txt", "body": "Rename it." })).await;
+    let first = s.get("/api/threads/activity?as=agent").await.json();
+    assert_eq!((ids(&first["threads"]), &first["cursor"]), (vec![a.as_str()], &json!("test:1")));
+
+    let waiting = wait(&s, "as=agent");
+    s.json("POST", &format!("/api/threads/{a}/replies"), json!({ "body": "Renamed.", "author": "agent" })).await;
+    assert!(still_waiting(&waiting).await, "the agent's own reply woke it");
+    s.json("POST", &format!("/api/threads/{a}/replies"), json!({ "body": "And the test?" })).await;
+    let r = waiting.await.unwrap();
+    assert_eq!((ids(&r["threads"]), &r["cursor"]), (vec![a.as_str()], &json!("test:3")));
+    assert_eq!(r["threads"][0]["messages"].as_array().unwrap().len(), 3);
+
+    // A timeout reports nothing and keeps the cursor where the last answer ended.
+    let quiet = wait(&s, "as=agent&timeout=0").await.unwrap();
+    assert_eq!((&quiet["threads"], &quiet["cursor"]), (&json!([]), &json!("test:3")));
+    s.close().await;
+}
+
+#[tokio::test]
+async fn waits_until_a_message_and_brings_the_changes_before_it_along() {
+    let s = TestServer::start().await;
+    let a = open(&s, json!({ "path": "a.txt", "body": "Rename it." })).await;
+    s.get("/api/threads/activity?as=agent").await;
+
+    let waiting = wait(&s, "as=agent&until=message");
+    s.json("PUT", &format!("/api/threads/{a}/resolved"), json!({ "resolved": true })).await;
+    assert!(still_waiting(&waiting).await, "a resolve woke a wait for a message");
+    let b = open(&s, json!({ "path": "a.txt", "body": "Split it." })).await;
+    let r = waiting.await.unwrap();
+    let mut expected = vec![a.as_str(), b.as_str()];
+    expected.sort_unstable();
+    let mut got = ids(&r["threads"]);
+    got.sort_unstable();
+    assert_eq!(got, expected);
+    let resolved = r["threads"].as_array().unwrap().iter().find(|t| t["id"] == a.as_str()).unwrap();
+    assert_eq!(resolved["resolved"], true);
+    s.close().await;
+}
+
+#[tokio::test]
+async fn refuses_as_beside_since_or_ignore_and_an_unknown_until() {
+    let s = TestServer::start().await;
+    for query in ["as=agent&since=test:0", "as=agent&ignore=agent", "as=agent&until=resolve"] {
+        assert_eq!(s.get(&format!("/api/threads/activity?{query}")).await.status, 400, "{query}");
+    }
+    s.close().await;
+}

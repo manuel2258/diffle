@@ -22,8 +22,7 @@ use crate::comments::import::parse_imports;
 use crate::error::Error;
 use crate::protocol::{
     Activity, ActivityQuery, AuthorQuery, ClearThreadsQuery, CommentAuthor, HiddenRequest, MessagePatch, ReplyCreate,
-    ResolvedRequest,
-    ServerMessage, ThreadList, ThreadQuery, ThreadState, ViewedEntry,
+    ResolvedRequest, ServerMessage, ThreadList, ThreadQuery, ThreadState, ViewedEntry,
 };
 use crate::session::Broadcaster;
 

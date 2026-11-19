@@ -3,7 +3,9 @@ use std::path::Path;
 use diffle::comments::import::parse_imports;
 use diffle::comments::{AnchorSource, CommentStore, ReviewView, SideView};
 use diffle::error::{Error, Result};
-use diffle::protocol::{CommentAnchor, CommentThread, Side, ThreadCreate, ThreadQuery, ThreadState, ViewedEntry};
+use diffle::protocol::{
+    CommentAnchor, CommentAuthor, CommentThread, Side, ThreadCreate, ThreadQuery, ThreadState, ViewedEntry,
+};
 use serde_json::{Value, json};
 
 fn anchor() -> CommentAnchor {
@@ -192,6 +194,18 @@ async fn keeps_hidden_apart_from_resolved_though_resolving_hides_and_reopening_s
     let reopened = s.set_resolved(&t.id, false).await.unwrap();
     assert_eq!((reopened.hidden, reopened.resolved), (None, false));
     assert!(matches!(s.set_hidden("nope", true).await, Err(Error::NotFound(_))));
+}
+
+#[tokio::test]
+async fn a_reviewer_reply_reopens_a_resolved_thread_and_an_agent_reply_leaves_it_resolved() {
+    let dir = tempfile::tempdir().unwrap();
+    let s = CommentStore::open(dir.path(), "working").await.unwrap();
+    let t = s.add_thread(anchor(), "why?".into()).await.unwrap();
+    s.set_resolved(&t.id, true).await.unwrap();
+    let by_agent = s.reply(&t.id, "because".into(), Some(CommentAuthor::Agent)).await.unwrap();
+    assert_eq!((by_agent.resolved, by_agent.hidden), (true, Some(true)));
+    let by_reviewer = s.reply(&t.id, "and a test?".into(), None).await.unwrap();
+    assert_eq!((by_reviewer.resolved, by_reviewer.resolved_at, by_reviewer.hidden), (false, None, None));
 }
 
 #[tokio::test]

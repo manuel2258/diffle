@@ -92,9 +92,16 @@ impl CommentStore {
         .await
     }
 
+    /// Adds a message by `author` (`None`: the reviewer). A reviewer's reply reopens a resolved
+    /// thread: it hands the thread back to the agent.
     pub async fn reply(&self, thread_id: &str, body: String, author: Option<CommentAuthor>) -> Result<CommentThread> {
         self.mutate(|set| {
             let t = find_thread(set, thread_id)?;
+            if author.is_none() && t.resolved {
+                t.resolved = false;
+                t.resolved_at = None;
+                t.hidden = None;
+            }
             t.messages.push(new_message(body, author));
             Ok((t.clone(), true))
         })

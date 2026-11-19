@@ -65,6 +65,7 @@
               ./Cargo.lock
               ./crates/diffle/protocol.generated.json
               ./crates/diffle/src/cli/skill.md
+              ./crates/diffle/src/cli/skill-interactive.md
             ];
           };
           common = {

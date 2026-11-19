@@ -17,6 +17,7 @@ categories = ["command-line-utilities", "development-tools"]
 include = [
   "/src/**/*.rs",
   "/src/cli/skill.md",
+  "/src/cli/skill-interactive.md",
   "/build.rs",
   "/protocol.generated.json",
   "/client/**",

@@ -47,8 +47,8 @@ pub fn main() -> ExitCode {
 
 async fn dispatch(cli: Cli) -> anyhow::Result<()> {
     let (req, later) = match cli.command {
-        Some(Command::Skill { no_frontmatter }) => {
-            let skill = skill::render();
+        Some(Command::Skill { no_frontmatter, interactive }) => {
+            let skill = if interactive { skill::INTERACTIVE.to_owned() } else { skill::render() };
             print!("{}", if no_frontmatter { skill::without_frontmatter(&skill) } else { &skill });
             return Ok(());
         }

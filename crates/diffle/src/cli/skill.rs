@@ -7,6 +7,9 @@ use serde_json::Value;
 
 const INTRO: &str = include_str!("skill.md");
 
+/// The live review loop over `diffle comments wait`, a skill of its own beside the agent interface.
+pub const INTERACTIVE: &str = include_str!("skill-interactive.md");
+
 const DIAGRAM: &str = r#"<diffle-diagram><svg viewBox="0 0 360 52">
   <g><rect x="8" y="16" width="88" height="28"/><text x="16" y="30">Login</text></g>
   <path d="M96 30 H136" class="arrow"/>

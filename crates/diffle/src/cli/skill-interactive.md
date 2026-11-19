@@ -1,0 +1,103 @@
+---
+name: diffle-interactive
+description: Answer the reviewer's comments in diffle live, while they review, in a loop that waits for each new comment. Use when the user wants to review with you live or interactively in diffle, such as "review this with me in diffle". For tours and one-off replies, use the diffle skill.
+---
+
+# Live review with diffle
+
+The reviewer comments in diffle while you wait. Every thread they open or reply to is addressed to
+you: answer it, change the working tree when they ask for a change, and wait for the next one. Stay
+in this session for the whole review; do not hand it to a subagent. This loop replaces the diffle
+skill's one-pass comment flow for the session. A tour still follows the diffle skill.
+
+These commands talk to the diffle serving the current repository, or the one `-C <path>` names.
+They exit 2 with "no diffle is running for this repository" when none runs.
+
+## 1. Start diffle
+
+The repository under review is the one your session works in. If the user already runs diffle there,
+use it. Otherwise ask what to review, if it is not obvious, and start diffle in the background,
+keeping its log:
+
+```
+diffle working --keep-alive > "<log>" 2>&1
+```
+
+`--keep-alive` keeps it up when the browser tab closes. Your edits show live only when the new side
+is the worktree: `working` (the default), a lone revision such as `main`, or a range ending in
+`worktree`. A comparison of two commits is frozen, so say so if the user wants fixes.
+
+## 2. Wait
+
+```
+diffle comments wait
+```
+
+It waits until the reviewer writes (a new thread, a reply, an edit) and prints one JSON document:
+`threads`, every thread that changed since your previous wait, as it is now, and `removed`, the ids
+of threads deleted since. The first wait of a run prints every thread at once. The server keeps your
+place, so there is no cursor to pass.
+
+- Give the command a timeout above 540 seconds, or your tool cuts the wait short.
+- `threads` is empty when 540 seconds passed: wait again at once, without ending your turn or asking
+  the user.
+- `resync: true` means the threads are the full set, not just the changes.
+- `commentKey` changes when the reviewer looks at another part of the review; the threads then
+  belong to that set.
+- Exit code 2 means diffle closed: the review is over.
+
+## 3. Answer
+
+A thread is `{ id, anchor, messages, resolved, hidden, stale }`. `anchor` is a line range
+`{ kind: "line", path, side, startLine, endLine, quoted }` (`side: "old"` is removed lines), a whole
+file `{ kind: "file", path }`, or a passage of your tour (see the diffle skill). Your own messages
+carry `"author": "agent"`.
+
+Answer every thread whose last message has no `author`: the reviewer wrote last, whether the thread
+is open, resolved or stale. Read the code at the anchor first. `stale: true` means `quoted` is old,
+often because your edit changed those lines: re-read the code instead.
+
+- A question or remark: answer it.
+- A change request: make the change in the working tree, then reply with what you changed and
+  where. If the change would be wrong, reply why instead.
+
+The other threads tell you what the reviewer did: a thread they resolved is done, and one they
+deleted is gone. Do not answer those.
+
+Reply once per thread, through stdin with a quoted heredoc, so quotes, `$(...)` and backticks in the
+text reach diffle as written:
+
+```
+diffle comments reply <thread-id> - <<'DIFFLE_END'
+<reply in Markdown>
+DIFFLE_END
+```
+
+Never resolve a thread: the reviewer resolves it, or replies to hand it back, which reopens it.
+
+Then wait again (step 2).
+
+## Your own points
+
+To raise something yourself, such as an open item from a self-review, open a thread:
+
+```
+diffle comments add src/a.ts --lines 12-14 - <<'DIFFLE_END'
+<point in Markdown>
+DIFFLE_END
+```
+
+Leave out `--lines` for the whole file; add `--side old` for removed lines. A refused anchor exits 2
+and says why: fix it, do not retry it as is. Your thread reaches your wait once the reviewer
+replies.
+
+## Writing
+
+Keep a reply to a few sentences: what you found or changed, with the file and line. Do not restate
+the question or narrate your process. Replies render as Markdown; a ` ```suggestion ` fence on a
+line thread shows as a suggested change of its lines.
+
+## Ending
+
+Stop when the user says the review is done, then stop the diffle you started. The threads stay in
+`<git-dir>/diffle/`; starting diffle on the same review shows them again.

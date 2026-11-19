@@ -37,6 +37,18 @@ fn prints_the_agent_interface_as_a_skill() {
 }
 
 #[test]
+fn prints_the_live_review_skill_with_interactive() {
+    let config = tempfile::tempdir().unwrap();
+    let out = run(config.path(), &["skill", "--interactive"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let skill = stdout(&out);
+    assert!(skill.starts_with("---\nname: diffle-interactive\n"));
+    insta::assert_snapshot!("skill_interactive", skill);
+    let bare = run(config.path(), &["skill", "--interactive", "--no-frontmatter"]);
+    assert_eq!(stdout(&bare), &skill[skill.find("# Live review with diffle\n").unwrap()..]);
+}
+
+#[test]
 fn help_is_the_committed_text_and_keeps_the_shorthands_in_a_section_of_their_own() {
     let config = tempfile::tempdir().unwrap();
     let help = |args: &[&str]| stdout(&run(config.path(), &[args, &["--help"]].concat()));

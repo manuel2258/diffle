@@ -188,6 +188,9 @@ pub enum Command {
         /// leave out the frontmatter that names the skill and says when to use it
         #[arg(long)]
         no_frontmatter: bool,
+        /// print the live review skill instead: answer the reviewer's comments as they write them
+        #[arg(long)]
+        interactive: bool,
     },
     /// print the config file path and contents
     Config,

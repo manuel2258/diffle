@@ -246,6 +246,8 @@ A coding agent in the same repository talks to the diffle running there:
 ```bash
 diffle comments list            # the threads you are shown, as JSON
 diffle comments reply <id> -    # answer a thread in Markdown; - reads stdin
+diffle comments add <path> -    # open a thread of its own; --lines 12-14 for lines
+diffle comments wait            # wait for your next comment; prints what changed since the last wait
 diffle tour push tour.html      # show a guided tour of the change; stdin without a file
 diffle tour clear               # remove it
 diffle tour export tour.html    # save it as one HTML file that opens offline; - for stdout
@@ -259,6 +261,11 @@ See [Take a tour of the change](#take-a-tour-of-the-change) for what a tour show
 `diffle skill` prints all of this for the agent, the tour's elements included, as a skill to
 install as is: save it as `SKILL.md` in a `diffle` folder among your agent's skills, such as
 `~/.claude/skills/diffle/`. `--no-frontmatter` leaves out its name and description.
+
+To have the agent answer while you review, start diffle with `--keep-alive` and install the live
+review skill next to it: `diffle skill --interactive > ~/.claude/skills/diffle-interactive/SKILL.md`.
+Then ask "review this with me in diffle": the agent waits for each comment, answers it in its
+thread, and changes the code when you ask.
 
 ## Open from lazygit
 

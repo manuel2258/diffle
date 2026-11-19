@@ -16,7 +16,7 @@ use tokio::sync::broadcast::error::RecvError;
 use tokio::time::Instant;
 
 use super::{ApiDeps, ApiError, ApiResult, body, query};
-use crate::comments::activity::{Change, Cursor, Since};
+use crate::comments::activity::{Change, Cursor, Since, ThreadChange};
 use crate::comments::format::format_prompt;
 use crate::comments::import::parse_imports;
 use crate::error::Error;
@@ -46,9 +46,9 @@ fn text(body: String) -> Response {
     ([(header::CONTENT_TYPE, "text/plain; charset=UTF-8")], body).into_response()
 }
 
-/// Logs a change to each thread, by its author (absent: the reviewer).
-fn changed(d: &ApiDeps, threads: impl IntoIterator<Item = (Option<CommentAuthor>, String)>) {
-    d.session.record(threads.into_iter().map(|(author, id)| (author, Change::Thread(id))));
+/// Logs a change of `kind` to each thread, by its author (absent: the reviewer).
+fn changed(d: &ApiDeps, kind: ThreadChange, threads: impl IntoIterator<Item = (Option<CommentAuthor>, String)>) {
+    d.session.record(threads.into_iter().map(|(author, id)| (author, Change::Thread(id, kind))));
 }
 
 fn thread_query(raw: Option<&str>, default: ThreadState) -> ApiResult<ThreadQuery> {
@@ -90,7 +90,7 @@ async fn import(State(d): State<Arc<ApiDeps>>, raw: Bytes) -> ApiResult {
     let source = d.session.anchor_source()?;
     let (added, _) = d.session.comments()?.import_threads(imports, &source).await?;
     if !added.is_empty() {
-        changed(&d, added.iter().map(|t| (t.messages[0].author, t.id.clone())));
+        changed(&d, ThreadChange::Message, added.iter().map(|t| (t.messages[0].author, t.id.clone())));
     }
     Ok((StatusCode::CREATED, Json(added)).into_response())
 }
@@ -101,14 +101,14 @@ async fn reply(State(d): State<Arc<ApiDeps>>, Path(id): Path<String>, raw: Bytes
         return Err(ApiError::bad_request("body: body required"));
     }
     let thread = d.session.comments()?.reply(&id, req.body, req.author).await?;
-    changed(&d, [(req.author, id)]);
+    changed(&d, ThreadChange::Message, [(req.author, id)]);
     Ok((StatusCode::CREATED, Json(thread)).into_response())
 }
 
 async fn edit_message(State(d): State<Arc<ApiDeps>>, Path((id, mid)): Path<(String, String)>, raw: Bytes) -> ApiResult {
     let req: MessagePatch = body(&raw)?;
     let thread = d.session.comments()?.edit_message(&id, &mid, req.body).await?;
-    changed(&d, [(req.author, id)]);
+    changed(&d, ThreadChange::Message, [(req.author, id)]);
     Ok(Json(thread).into_response())
 }
 
@@ -119,28 +119,28 @@ async fn remove_message(
 ) -> ApiResult {
     let q: AuthorQuery = query(raw.as_deref())?;
     let thread = d.session.comments()?.remove_message(&id, &mid).await?;
-    changed(&d, [(q.author, id)]);
+    changed(&d, ThreadChange::Removal, [(q.author, id)]);
     Ok(thread.map_or_else(|| StatusCode::NO_CONTENT.into_response(), |t| Json(t).into_response()))
 }
 
 async fn resolve(State(d): State<Arc<ApiDeps>>, Path(id): Path<String>, raw: Bytes) -> ApiResult {
     let req: ResolvedRequest = body(&raw)?;
     let thread = d.session.comments()?.set_resolved(&id, req.resolved).await?;
-    changed(&d, [(req.author, id)]);
+    changed(&d, ThreadChange::State, [(req.author, id)]);
     Ok(Json(thread).into_response())
 }
 
 async fn hide(State(d): State<Arc<ApiDeps>>, Path(id): Path<String>, raw: Bytes) -> ApiResult {
     let req: HiddenRequest = body(&raw)?;
     let thread = d.session.comments()?.set_hidden(&id, req.hidden).await?;
-    changed(&d, [(req.author, id)]);
+    changed(&d, ThreadChange::State, [(req.author, id)]);
     Ok(Json(thread).into_response())
 }
 
 async fn remove_thread(State(d): State<Arc<ApiDeps>>, Path(id): Path<String>, RawQuery(raw): RawQuery) -> ApiResult {
     let q: AuthorQuery = query(raw.as_deref())?;
     d.session.comments()?.remove_thread(&id).await?;
-    changed(&d, [(q.author, id)]);
+    changed(&d, ThreadChange::Removal, [(q.author, id)]);
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
@@ -152,7 +152,7 @@ async fn clear(State(d): State<Arc<ApiDeps>>, RawQuery(raw): RawQuery) -> ApiRes
         None => d.session.comments()?.clear().await?,
         Some(other) => return Err(ApiError::bad_request(format!("stale: expected \"1\", got \"{other}\""))),
     };
-    changed(&d, gone.into_iter().map(|id| (q.author, id)));
+    changed(&d, ThreadChange::Removal, gone.into_iter().map(|id| (q.author, id)));
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 

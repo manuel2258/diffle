@@ -13,7 +13,7 @@ use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
 
 use super::{ApiDeps, ApiError, ApiResult, body};
-use crate::comments::activity::Change;
+use crate::comments::activity::{Change, ThreadChange};
 use crate::iterations::now_ms;
 use crate::protocol::{
     CommentAuthor, ServerMessage, Tour, TourExportAnswer, TourPush, TourPushed, TourRejection, TourResponse,
@@ -73,7 +73,7 @@ async fn open_thread(State(d): State<Arc<ApiDeps>>, raw: Bytes) -> ApiResult {
         return Err(ApiError::bad_request("body: body required"));
     }
     let thread = d.session.comments()?.add_tour_thread(&req.node, &req.target, req.body).await?;
-    d.session.record([(None, Change::Thread(thread.id.clone()))]);
+    d.session.record([(None, Change::Thread(thread.id.clone(), ThreadChange::Message))]);
     Ok((StatusCode::CREATED, Json(thread)).into_response())
 }
 
@@ -126,5 +126,5 @@ async fn answer_export(State(d): State<Arc<ApiDeps>>, Path(id): Path<String>, ra
 
 /// Logs the threads a push or a clear moved, as the agent's doing.
 fn record(d: &ApiDeps, moved: Vec<String>) {
-    d.session.record(moved.into_iter().map(|id| (Some(CommentAuthor::Agent), Change::Thread(id))));
+    d.session.record(moved.into_iter().map(|id| (Some(CommentAuthor::Agent), Change::Thread(id, ThreadChange::State))));
 }

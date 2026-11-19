@@ -11,10 +11,21 @@ const CAPACITY: usize = 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Change {
-    /// A thread was created, replied to, edited, resolved, reopened or deleted.
-    Thread(String),
+    /// A thread changed in the way its kind says.
+    Thread(String, ThreadChange),
     /// The shown comment set switched to another key.
     Key,
+}
+
+/// What happened to a thread, so a waiter can wake on some kinds alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ThreadChange {
+    /// Someone wrote: a new thread, a reply, or an edited message.
+    Message,
+    /// Resolved, reopened, hidden or shown, or moved by a tour push.
+    State,
+    /// A message or the whole thread was deleted.
+    Removal,
 }
 
 /// A position in one run's log: `<instance>:<seq>`.
@@ -122,7 +133,7 @@ impl ActivityLog {
         let mut key = false;
         for entry in after {
             match &entry.change {
-                Change::Thread(id) => drop(threads.insert(id.clone())),
+                Change::Thread(id, _) => drop(threads.insert(id.clone())),
                 Change::Key => key = true,
             }
         }
@@ -137,7 +148,7 @@ mod tests {
     const AGENT: Option<CommentAuthor> = Some(CommentAuthor::Agent);
 
     fn thread(id: &str) -> Change {
-        Change::Thread(id.into())
+        Change::Thread(id.into(), ThreadChange::Message)
     }
 
     fn at(seq: u64) -> Cursor {

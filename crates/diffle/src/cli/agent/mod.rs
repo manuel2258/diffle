@@ -27,6 +27,11 @@ pub async fn comments(command: CommentsCommand, dir: Option<PathBuf>) -> anyhow:
             let diffle = connect(repo, dir).await?;
             print(&comments::reply(&diffle, &thread, body).await?)
         }
+        CommentsCommand::Add { path, lines, side, body, repo } => {
+            let body = if body == "-" { read_document(None)? } else { body };
+            let diffle = connect(repo, dir).await?;
+            print(&comments::add(&diffle, &path, lines, side.as_deref(), body).await?)
+        }
         CommentsCommand::Wait { until, timeout, repo } => {
             let diffle = connect(repo, dir).await?;
             print(&comments::wait(&diffle, &until, timeout).await?)

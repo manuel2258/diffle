@@ -210,6 +210,24 @@ fn waits_for_the_reviewer_as_the_agent_from_where_the_last_wait_ended() {
     assert_eq!((ids(&replied), &replied["threads"][0]["resolved"]), (vec![id], &json!(false)));
 }
 
+#[test]
+fn opens_threads_as_the_agent_on_lines_or_the_whole_file() {
+    let t = repo();
+    let _served = Served::start(&t.path, &["--port", "0"]);
+
+    let line = json_out(&comments_stdin(&t.path, &["add", "app.py", "--lines", "1-2", "-"], "Worth a test?\n"));
+    insta::assert_json_snapshot!("add", masked(line));
+    let old = json_out(&comments(&t.path, &["add", "lib.py", "--lines", "1", "--side", "old", "Why drop 1?"]));
+    assert_eq!((&old["anchor"]["side"], &old["anchor"]["quoted"]), (&json!("old"), &json!("z = 1")));
+    let file = json_out(&comments(&t.path, &["add", "lib.py", "Split this module."]));
+    assert_eq!(file["anchor"], json!({ "kind": "file", "path": "lib.py" }));
+
+    assert_user_error(&comments(&t.path, &["add", "gone.py", "Hm."]), "gone.py");
+    assert_user_error(&comments(&t.path, &["add", "app.py", "--lines", "9", "Hm."]), "9");
+    assert_user_error(&comments(&t.path, &["add", "app.py", "  "]), "the comment is empty");
+    assert_eq!(comments(&t.path, &["add", "app.py", "--lines", "3-1", "Hm."]).status.code(), Some(2));
+}
+
 /// `value` with its ids, times and comment key masked, which change from run to run.
 fn masked(value: Value) -> Value {
     match value {

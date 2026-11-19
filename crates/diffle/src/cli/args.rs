@@ -226,6 +226,23 @@ pub enum CommentsCommand {
         #[command(flatten)]
         repo: RepoOpts,
     },
+    /// open a thread as the agent; prints it as JSON
+    Add {
+        /// the file, relative to the repository root
+        #[arg(value_name = "path")]
+        path: String,
+        /// the line or lines, as `12` or `12-14` (default: the whole file)
+        #[arg(long, value_name = "lines", value_parser = line_range)]
+        lines: Option<(u64, u64)>,
+        /// the side the lines are on (default: new)
+        #[arg(long, value_name = "side", value_parser = ["old", "new"], requires = "lines")]
+        side: Option<String>,
+        /// the comment, in Markdown (`-`: stdin)
+        #[arg(value_name = "body|-")]
+        body: String,
+        #[command(flatten)]
+        repo: RepoOpts,
+    },
     /// wait for the reviewer as the agent; prints every change since the previous wait as JSON
     Wait {
         /// what ends the wait: a message (a new thread, a reply, an edit) or any change
@@ -237,6 +254,16 @@ pub enum CommentsCommand {
         #[command(flatten)]
         repo: RepoOpts,
     },
+}
+
+/// `12` or `12-14`: a first and a last line, both counted from 1.
+fn line_range(text: &str) -> Result<(u64, u64), String> {
+    let (start, end) = text.split_once('-').unwrap_or((text, text));
+    let line = |n: &str| n.parse::<u64>().ok().filter(|n| *n > 0);
+    match (line(start), line(end)) {
+        (Some(start), Some(end)) if start <= end => Ok((start, end)),
+        _ => Err(format!("expected a line or a range such as 12-14, got {text}")),
+    }
 }
 
 #[derive(Subcommand, Debug)]

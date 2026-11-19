@@ -1,9 +1,12 @@
 //! The comment threads an agent reads and answers, always of the set the reviewer is shown.
 use reqwest::{Method, StatusCode};
 
+use anyhow::Context;
+use serde_json::json;
+
 use super::server::Diffle;
 use crate::error::Error;
-use crate::protocol::{Activity, CommentAuthor, CommentThread, ReplyCreate, ThreadList};
+use crate::protocol::{Activity, ApiError, CommentAuthor, CommentThread, ReplyCreate, ThreadList};
 
 /// The shown set's threads in `state` (all by default), on `path` alone when given.
 pub async fn list(diffle: &Diffle, state: Option<&str>, path: Option<&str>) -> anyhow::Result<ThreadList> {
@@ -41,4 +44,33 @@ pub async fn wait(diffle: &Diffle, until: &str, timeout: u64) -> anyhow::Result<
         return Err(Error::NotRunning.into());
     }
     Ok(activity)
+}
+
+/// Opens the agent's thread on `lines` of `path` (`side` new by default), or on the whole file. An
+/// anchor the review cannot place, or an empty body, is the agent's to fix.
+pub async fn add(
+    diffle: &Diffle,
+    path: &str,
+    lines: Option<(u64, u64)>,
+    side: Option<&str>,
+    body: String,
+) -> anyhow::Result<CommentThread> {
+    if body.trim().is_empty() {
+        return Err(Error::Invalid("the comment is empty".into()).into());
+    }
+    let mut request = json!({ "path": path, "body": body, "author": "agent" });
+    if let Some((start, end)) = lines {
+        request["startLine"] = start.into();
+        request["endLine"] = end.into();
+    }
+    if let Some(side) = side {
+        request["side"] = side.into();
+    }
+    let response = diffle.send(Method::POST, "api/threads", Some(&request)).await?;
+    if response.status() == StatusCode::BAD_REQUEST {
+        let error = response.json::<ApiError>().await.map_or_else(|e| e.to_string(), |e| e.error);
+        return Err(Error::Invalid(error).into());
+    }
+    let mut added: Vec<CommentThread> = Diffle::success(response).await?.json().await?;
+    added.pop().context("diffle opened no thread")
 }

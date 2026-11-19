@@ -1,0 +1,26 @@
+---
+source: crates/diffle/tests/agent.rs
+expression: masked(line)
+---
+{
+  "anchor": {
+    "endLine": 2,
+    "kind": "line",
+    "path": "app.py",
+    "quoted": "x = 1\ny = 2",
+    "side": "new",
+    "startLine": 1
+  },
+  "id": "[id]",
+  "messages": [
+    {
+      "author": "agent",
+      "body": "Worth a test?\n",
+      "createdAt": "[time]",
+      "id": "[id]",
+      "updatedAt": "[time]"
+    }
+  ],
+  "resolved": false,
+  "stale": false
+}

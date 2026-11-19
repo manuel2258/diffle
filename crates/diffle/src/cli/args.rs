@@ -226,6 +226,17 @@ pub enum CommentsCommand {
         #[command(flatten)]
         repo: RepoOpts,
     },
+    /// wait for the reviewer as the agent; prints every change since the previous wait as JSON
+    Wait {
+        /// what ends the wait: a message (a new thread, a reply, an edit) or any change
+        #[arg(long, value_name = "kind", value_parser = ["message", "any"], default_value = "message")]
+        until: String,
+        /// seconds to wait at most, then print no threads
+        #[arg(long, value_name = "seconds", default_value_t = 540)]
+        timeout: u64,
+        #[command(flatten)]
+        repo: RepoOpts,
+    },
 }
 
 #[derive(Subcommand, Debug)]

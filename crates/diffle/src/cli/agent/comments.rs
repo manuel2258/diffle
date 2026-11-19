@@ -3,7 +3,7 @@ use reqwest::{Method, StatusCode};
 
 use super::server::Diffle;
 use crate::error::Error;
-use crate::protocol::{CommentAuthor, CommentThread, ReplyCreate, ThreadList};
+use crate::protocol::{Activity, CommentAuthor, CommentThread, ReplyCreate, ThreadList};
 
 /// The shown set's threads in `state` (all by default), on `path` alone when given.
 pub async fn list(diffle: &Diffle, state: Option<&str>, path: Option<&str>) -> anyhow::Result<ThreadList> {
@@ -30,4 +30,15 @@ pub async fn reply(diffle: &Diffle, thread: &str, body: String) -> anyhow::Resul
         return Err(Error::Invalid(format!("no thread {thread} in the review the reviewer is shown")).into());
     }
     Ok(Diffle::success(response).await?.json().await?)
+}
+
+/// Waits as the agent until the reviewer makes a change `until` names, then answers every change
+/// since the agent's previous wait; the server keeps that cursor. A diffle that closes is gone.
+pub async fn wait(diffle: &Diffle, until: &str, timeout: u64) -> anyhow::Result<Activity> {
+    let activity: Activity =
+        diffle.get(&format!("api/threads/activity?as=agent&until={until}&timeout={timeout}")).await?;
+    if activity.closed {
+        return Err(Error::NotRunning.into());
+    }
+    Ok(activity)
 }

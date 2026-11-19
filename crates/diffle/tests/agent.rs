@@ -181,6 +181,35 @@ fn refuses_a_reply_to_a_thread_the_review_lacks() {
     assert_user_error(&comments(&t.path, &["reply", "gone", "hello"]), "no thread gone in the review");
 }
 
+#[test]
+fn waits_for_the_reviewer_as_the_agent_from_where_the_last_wait_ended() {
+    let t = repo();
+    let served = Served::start(&t.path, &["--port", "0"]);
+    let (_, body) = http(&served.url, "POST", "/api/threads", r#"{"path":"app.py","startLine":2,"body":"why y?"}"#);
+    let id = serde_json::from_str::<Value>(&body).unwrap()[0]["id"].as_str().unwrap().to_owned();
+    let ids = |out: &Value| -> Vec<String> {
+        out["threads"].as_array().unwrap().iter().map(|t| t["id"].as_str().unwrap().to_owned()).collect()
+    };
+
+    // The first wait of a run answers every thread at once: what an agent reads, masked.
+    let first = json_out(&comments(&t.path, &["wait"]));
+    insta::assert_json_snapshot!("wait", masked(first));
+    assert!(ids(&json_out(&comments(&t.path, &["wait", "--timeout", "1"]))).is_empty());
+
+    // A resolve does not end a wait for a message, and the next wait still reports it.
+    let path = format!("/api/threads/{id}/resolved");
+    let (status, _) = http(&served.url, "PUT", &path, r#"{"resolved":true}"#);
+    assert!(status.contains("200"), "{status}");
+    assert!(ids(&json_out(&comments(&t.path, &["wait", "--timeout", "1"]))).is_empty());
+    let resolved = json_out(&comments(&t.path, &["wait", "--until", "any", "--timeout", "1"]));
+    assert_eq!((ids(&resolved), &resolved["threads"][0]["resolved"]), (vec![id.clone()], &json!(true)));
+
+    let (status, _) = http(&served.url, "POST", &format!("/api/threads/{id}/replies"), r#"{"body":"and a test?"}"#);
+    assert!(status.contains("201"), "{status}");
+    let replied = json_out(&comments(&t.path, &["wait"]));
+    assert_eq!((ids(&replied), &replied["threads"][0]["resolved"]), (vec![id], &json!(false)));
+}
+
 /// `value` with its ids, times and comment key masked, which change from run to run.
 fn masked(value: Value) -> Value {
     match value {
@@ -188,7 +217,7 @@ fn masked(value: Value) -> Value {
             fields
                 .into_iter()
                 .map(|(key, value)| match key.as_str() {
-                    "id" | "commentKey" => (key, json!("[id]")),
+                    "id" | "commentKey" | "cursor" => (key, json!("[id]")),
                     "createdAt" | "updatedAt" | "resolvedAt" => (key, json!("[time]")),
                     _ => (key, masked(value)),
                 })

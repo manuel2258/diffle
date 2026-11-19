@@ -1,0 +1,34 @@
+---
+source: crates/diffle/tests/agent.rs
+expression: masked(first)
+---
+{
+  "closed": false,
+  "commentKey": "[id]",
+  "cursor": "[id]",
+  "removed": [],
+  "resync": false,
+  "threads": [
+    {
+      "anchor": {
+        "endLine": 2,
+        "kind": "line",
+        "path": "app.py",
+        "quoted": "y = 2",
+        "side": "new",
+        "startLine": 2
+      },
+      "id": "[id]",
+      "messages": [
+        {
+          "body": "why y?",
+          "createdAt": "[time]",
+          "id": "[id]",
+          "updatedAt": "[time]"
+        }
+      ],
+      "resolved": false,
+      "stale": false
+    }
+  ]
+}
